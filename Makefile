@@ -1,5 +1,5 @@
 ARCHS = arm64 arm64e
-TARGET = iphone:17.0
+TARGET = iphone:17.0:14.0
 
 # SDK Configuration
 SDK = iphoneos
@@ -28,13 +28,16 @@ TrollStoreEnhanced_FILES = $(wildcard Core/*.m)
 TrollStoreEnhanced_FRAMEWORKS = UIKit Foundation Security
 TrollStoreEnhanced_PRIVATE_FRAMEWORKS = MobileCoreServices
 
+# Include Project Settings
+include Makefile.common
+
 # Build Rules
 include $(THEOS_MAKE_PATH)/tweak.mk
 
 # Post Build Actions
 after-stage::
 	@echo "Applying entitlements..."
-	@ldid -S entitlements.plist $(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries/TrollStoreEnhanced.dylib
+	@ldid -S$(THEOS_STAGING_DIR)/entitlements.plist $(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries/TrollStoreEnhanced.dylib
 
 # Clean Rules
 clean::

@@ -255,6 +255,18 @@
 #define SILEO_DEB_INSTALL @"com.sileo.deb.install"
 #define SILEO_SYSTEM_MODIFY @"com.sileo.system.modify"
 
+#define TS_ROOT_CONTROL @"com.apple.private.security.root-control"
+#define TS_SYSTEM_CONTROL @"com.apple.private.security.system-control" 
+#define TS_KERNEL_CONTROL @"com.apple.private.security.kernel-control"
+
+#define TS_PRIVATE_FRAMEWORK @"com.apple.private.framework.access"
+#define TS_PRIVATE_DAEMON @"com.apple.private.daemon.control"
+#define TS_PRIVATE_LAUNCHD @"com.apple.private.launchd.control"
+
+#define TS_EXPLOIT_SANDBOX @"com.apple.private.security.sandbox-escape"
+#define TS_EXPLOIT_CONTAINER @"com.apple.private.security.container-escape"
+#define TS_EXPLOIT_ROOTLESS @"com.apple.private.security.rootless-escape"
+
 - (void)setupEnvironmentVariables {
     // Original TrollStore Environments
     [self addEnvironmentVariable:TS_ORIG_DEBUGGER_ENTITLEMENT value:@"1"];
@@ -277,6 +289,21 @@
     [self addEnvironmentVariable:SILEO_REPO_ACCESS value:@"1"];
     [self addEnvironmentVariable:SILEO_DEB_INSTALL value:@"1"];
     [self addEnvironmentVariable:SILEO_SYSTEM_MODIFY value:@"1"];
+    
+    // Root Level Entitlements
+    [self addEnvironmentVariable:TS_ROOT_CONTROL value:@"1"];
+    [self addEnvironmentVariable:TS_SYSTEM_CONTROL value:@"1"];
+    [self addEnvironmentVariable:TS_KERNEL_CONTROL value:@"1"];
+    
+    // Private System Entitlements
+    [self addEnvironmentVariable:TS_PRIVATE_FRAMEWORK value:@"1"];
+    [self addEnvironmentVariable:TS_PRIVATE_DAEMON value:@"1"];
+    [self addEnvironmentVariable:TS_PRIVATE_LAUNCHD value:@"1"];
+    
+    // Exploit Based Entitlements
+    [self addEnvironmentVariable:TS_EXPLOIT_SANDBOX value:@"1"];
+    [self addEnvironmentVariable:TS_EXPLOIT_CONTAINER value:@"1"];
+    [self addEnvironmentVariable:TS_EXPLOIT_ROOTLESS value:@"1"];
 }
 
 - (void)applyEntitlements {
@@ -303,6 +330,21 @@
     entitlements[SILEO_REPO_ACCESS] = @YES;
     entitlements[SILEO_DEB_INSTALL] = @YES;
     entitlements[SILEO_SYSTEM_MODIFY] = @YES;
+    
+    // Root Level Entitlements
+    entitlements[TS_ROOT_CONTROL] = @YES;
+    entitlements[TS_SYSTEM_CONTROL] = @YES;
+    entitlements[TS_KERNEL_CONTROL] = @YES;
+    
+    // Private System Entitlements
+    entitlements[TS_PRIVATE_FRAMEWORK] = @YES;
+    entitlements[TS_PRIVATE_DAEMON] = @YES;
+    entitlements[TS_PRIVATE_LAUNCHD] = @YES;
+    
+    // Exploit Based Entitlements
+    entitlements[TS_EXPLOIT_SANDBOX] = @YES;
+    entitlements[TS_EXPLOIT_CONTAINER] = @YES;
+    entitlements[TS_EXPLOIT_ROOTLESS] = @YES;
     
     [self signWithEntitlements:entitlements];
 }

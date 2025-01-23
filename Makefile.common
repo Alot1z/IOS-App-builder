@@ -1,0 +1,14 @@
+ARCHS = arm64 arm64e
+TARGET = iphone:17.0:14.0
+
+include $(THEOS)/makefiles/common.mk
+
+TWEAK_NAME = TrollStoreEnhanced
+
+TrollStoreEnhanced_FILES = $(wildcard Core/*.m)
+TrollStoreEnhanced_FRAMEWORKS = UIKit Foundation Security
+TrollStoreEnhanced_PRIVATE_FRAMEWORKS = MobileCoreServices
+TrollStoreEnhanced_CFLAGS = -fobjc-arc
+TrollStoreEnhanced_CODESIGN_FLAGS = -S../entitlements.plist
+
+include $(THEOS_MAKE_PATH)/tweak.mk

@@ -7,4 +7,7 @@ Maintainer: Alot1z
 Author: Alot1z
 Section: System
 Tag: role::hacker
-Depends: firmware (>= 14.0), firmware (<= 17.0)
+Depends: firmware (>= 14.0), firmware (<= 17.0), mobilesubstrate, preferenceloader
+Conflicts: com.opa334.trollstore
+Replaces: com.opa334.trollstore
+Priority: optional
