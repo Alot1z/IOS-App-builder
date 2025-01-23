@@ -22,6 +22,183 @@ An enhanced version of TrollStore with advanced iOS system integration and secur
 - Device-specific documentation
 - Troubleshooting guides
 
+## New Features in TrollStore App
+
+### App Management Interface
+#### Location: Main Tab > Installed Apps
+- **Enhanced App List**
+  - Shows all installed apps with new detailed info
+  - Display app version, bundle ID, and environment status
+  - New quick action buttons for each app
+
+#### App Environment Editor
+**Location: App Details > Environment Variables**
+1. Tap any app in the list
+2. Select "Edit Environment"
+3. Add/Edit variables:
+   ```
+   DYLD_INSERT_LIBRARIES=/path/to/tweak.dylib
+   TROLLSTORE_ENTITLEMENTS=1
+   ```
+4. Tap "Save" to store changes
+5. **NEW**: Tap "Reinstall" button that appears after saving
+   - This reregisters the app with new environment
+   - Preserves app data while applying changes
+
+### New Control Center
+**Location: Settings Tab > Advanced Controls**
+- **Process Manager**
+  - View running processes
+  - Force stop apps
+  - Clear app cache
+  - Reset app environment
+
+- **Security Controls**
+  - Manage entitlements
+  - Toggle security features
+  - Certificate management
+
+### Enhanced Installation
+**Location: Main Tab > "+" Button**
+- **Multi-Source Install**
+  - Local IPA files
+  - Direct URL install
+  - **NEW**: Bulk installation support
+  
+- **Installation Options**
+  - Custom app name
+  - Bundle ID modification
+  - Environment preset selection
+
+### Advanced Features
+**Location: Settings > Advanced**
+- **Persistence Helper**
+  - Enhanced persistence options
+  - Auto-respring settings
+  - Update survival configuration
+
+- **Root Helper**
+  - Root access management
+  - System modification tools
+  - FileSystem access controls
+
+### URL Scheme Support
+**Usage: From Any App**
+```
+trollstore://install?url=<IPA_URL>
+trollstore://settings/environment?bundle=<BUNDLE_ID>
+```
+
+## Using TrollStore Enhanced
+
+### Main App Interface
+![Main Interface](images/main_interface.png)
+
+#### 1. App List View (Home Screen)
+- **Top Bar**:
+  - "+" button for new installations
+  - Search bar for filtering apps
+  - Sort options (Name, Date, Size)
+
+- **App Cards**:
+  - Shows app icon and name
+  - Bundle ID and version
+  - Environment status indicator
+  - Quick action buttons:
+    - Edit Environment
+    - Reinstall
+    - Delete
+    - Share
+
+#### 2. Environment Editor
+![Environment Editor](images/env_editor.png)
+
+1. **Access**:
+   - Tap any app in the list
+   - Select "Edit Environment"
+   
+2. **Available Options**:
+   ```
+   # Common Environment Variables
+   DYLD_INSERT_LIBRARIES=/path/to/tweak.dylib
+   TROLLSTORE_ENTITLEMENTS=1
+   TROLLSTORE_PERSIST=1
+   ```
+
+3. **Using the Editor**:
+   - Add/Remove variables with +/- buttons
+   - Use presets from dropdown menu
+   - Import/Export configurations
+   
+4. **Saving Changes**:
+   - Tap "Save" to store configuration
+   - **Important**: Tap "Reinstall" in the popup
+   - Wait for app reregistration
+
+#### 3. Advanced Controls
+![Advanced Menu](images/advanced_menu.png)
+
+- **Process Manager**:
+  - List of running processes
+  - Memory usage indicators
+  - Force stop option
+  - Cache clearing
+  
+- **Security Settings**:
+  - Entitlement toggles
+  - Root access controls
+  - System integration options
+
+### Installation Methods
+
+#### 1. Local IPA Install
+1. Tap "+" on main screen
+2. Choose "Select IPA File"
+3. Browse to your IPA
+4. Configure options:
+   - Custom name
+   - Environment variables
+   - Persistence settings
+5. Tap "Install"
+
+#### 2. URL Installation
+1. Tap "+" on main screen
+2. Choose "Install from URL"
+3. Enter or paste IPA URL
+4. Configure same options
+5. Tap "Install"
+
+#### 3. Bulk Installation
+1. Tap "+" on main screen
+2. Choose "Bulk Install"
+3. Select multiple IPAs or URLs
+4. Apply batch settings
+5. Start installation
+
+### Quick Tips
+- **Save Button**: Always visible after changes
+- **Reinstall Button**: Appears after saving
+- **Persistence**: Enable in advanced settings
+- **Backup**: Export configurations regularly
+
+### Troubleshooting
+1. **App Won't Launch After Environment Change**:
+   - Go back to Environment Editor
+   - Verify variables are correct
+   - Try removing one variable at a time
+   - Always use "Reinstall" after changes
+
+2. **Environment Not Applying**:
+   - Check if "Save" was tapped
+   - Ensure "Reinstall" was done
+   - Verify app is properly registered
+
+3. **Installation Fails**:
+   - Check URL/file validity
+   - Verify enough storage
+   - Try clearing TrollStore cache
+   - Use "Advanced Install" option
+
 ## Technical Implementation
 
 ### 1. Core System Integration
@@ -345,15 +522,89 @@ cd TrollStore_Enhanced
 - Check code style: `make lint`
 - Verify build: `make package DEBUG=1`
 
-## Credits & Acknowledgments
+## How New Features Are Integrated
+
+### 1. Build Integration
+When you build TrollStore Enhanced, the following components are added:
+
+```plaintext
+TrollStore.app/
+├── Interface
+│   ├── MainViewController      # Enhanced app list
+│   ├── EnvironmentVC          # Environment editor
+│   └── AdvancedVC             # New controls
+├── Core
+│   ├── TSEnhancedManager      # Core functionality
+│   ├── TSEnvironmentManager   # Environment handling
+│   └── TSProcessManager       # Process control
+└── Resources
+    └── Presets/              # Default configurations
+```
+
+### 2. Feature Integration
+- **Main App Interface**
+  - Enhanced features are automatically integrated into UI
+  - New buttons and controls appear in relevant sections
+  - All new features accessible through standard navigation
+
+- **Background Services**
+  - New daemons run for advanced features
+  - Automatic integration with iOS
+  - Enhanced persistence handling
+
+### 3. Using New Features
+
+#### Environment Modification
+1. Open TrollStore
+2. Tap any installed app
+3. Select "Edit Environment"
+4. Make changes
+5. Tap "Save"
+6. **Important**: Tap "Reinstall" when prompted
+   - This step is crucial for applying changes
+   - App will reregister with new settings
+
+#### Advanced Installation
+1. Tap "+" on main screen
+2. Choose installation source
+3. Select advanced options:
+   - Set environment variables
+   - Configure entitlements
+   - Choose persistence options
+4. Tap "Install"
+
+#### Process Management
+1. Go to Settings > Advanced
+2. Select "Process Manager"
+3. View and control running apps
+4. Use quick actions for common tasks
+
+## Build Output Integration
+When building TrollStore Enhanced, new features are compiled and integrated:
+
+1. **Core Integration**
+```bash
+make package FINALPACKAGE=1
+```
+- Compiles new UI components
+- Builds enhanced features
+- Integrates with main TrollStore app
+
+2. **Extension Building**
+```bash
+cd extensions
+make package
+```
+- Creates feature modules
+- Builds new functionality
+- Prepares for integration
+
+3. **Final Integration**
+- All components are packaged into main .deb
+- Features automatically integrate on installation
+- No manual setup required
+
+## Credits & Version History
 - Original TrollStore by @opa334
-- Enhanced build tools and extensions by Alot1z
-
-## Version History
-- 1.0.0: Initial enhanced version with improved build tools
-- 1.0.1: Added extension support
-- 1.0.2: Improved documentation and guides
-- 1.0.3: Added automated build system and environment controls
-
-## License
-This project is licensed under the same terms as the original TrollStore.
+- Enhanced functionality by Alot1z
+- Version 1.0.3: Advanced system integration
