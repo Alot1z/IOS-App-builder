@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>tools</key>
+    <dict>
+        <key>ldid</key>
+        <dict>
+            <key>path</key>
+            <string>ldid</string>
+            <key>description</key>
+            <string>Code signing and binary inspection tool</string>
+        </dict>
+        <key>choma</key>
+        <dict>
+            <key>path</key>
+            <string>choma</string>
+            <key>description</key>
+            <string>Binary patching and modification tool</string>
+        </dict>
+        <key>unzip</key>
+        <dict>
+            <key>path</key>
+            <string>unzip</string>
+            <key>description</key>
+            <string>Archive management tool</string>
+        </dict>
+    </dict>
+</dict>
+</plist>
