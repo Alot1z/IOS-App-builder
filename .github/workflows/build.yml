@@ -12,7 +12,7 @@ jobs:
     runs-on: macos-latest
     
     env:
-      THEOS: /opt/theos
+      THEOS: ${{ github.workspace }}/theos
       THEOS_DEVICE_IP: 127.0.0.1
       THEOS_DEVICE_PORT: 22
       SDK_VERSION: "17.0"
@@ -26,18 +26,33 @@ jobs:
     - name: Install Dependencies
       run: |
         brew install ldid make xz dpkg || true
+        brew install wget || true
         
     - name: Setup Theos
       run: |
         git clone --recursive https://github.com/theos/theos.git $THEOS
-        
-    - name: Install iOS SDK
-      run: |
-        mkdir -p $THEOS/sdks
         curl -LO https://github.com/theos/sdks/archive/master.zip
+        unzip master.zip -d $THEOS/sdks
+        mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
+        rm -rf master.zip $THEOS/sdks/sdks-master
+        curl -LO https://github.com/theos/theos/archive/refs/heads/master.zip
         unzip master.zip
-        mv sdks-master/iPhoneOS${{ env.SDK_VERSION }}.sdk $THEOS/sdks/
-        rm -rf master.zip sdks-master
+        cp -r theos-master/* $THEOS/
+        rm -rf master.zip theos-master
+        
+    - name: Install Additional Tools
+      run: |
+        git clone https://github.com/sbingner/llvm-project
+        cd llvm-project
+        sudo xcode-select --switch /Applications/Xcode.app
+        mkdir build && cd build
+        cmake -G Ninja ../llvm \
+          -DLLVM_ENABLE_PROJECTS="clang;lld" \
+          -DCMAKE_BUILD_TYPE=Release
+        ninja
+        sudo ninja install
+        cd ../..
+        rm -rf llvm-project
         
     - name: Build Package
       run: |
