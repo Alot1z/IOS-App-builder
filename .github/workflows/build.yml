@@ -17,22 +17,18 @@ jobs:
       THEOS_DEVICE_PORT: 22
       SDK_VERSION: "17.0"
       
-      # Build Configuration
-      FINALPACKAGE: 1
-      DEBUG: 0
-      
     steps:
     - uses: actions/checkout@v3
       with:
         submodules: recursive
         fetch-depth: 0
     
-    - name: Setup Build Environment
+    - name: Install Dependencies
       run: |
-        brew install ldid || true
-        brew install make || true
-        brew install xz || true
-        brew install dpkg || true
+        brew install ldid make xz dpkg || true
+        
+    - name: Setup Theos
+      run: |
         git clone --recursive https://github.com/theos/theos.git $THEOS
         
     - name: Install iOS SDK
@@ -43,25 +39,17 @@ jobs:
         mv sdks-master/iPhoneOS${{ env.SDK_VERSION }}.sdk $THEOS/sdks/
         rm -rf master.zip sdks-master
         
-    - name: Configure Build
-      run: |
-        mkdir -p packages
-        chmod +x $THEOS/bin/*
-        $THEOS/bin/update-theos
-        
     - name: Build Package
       run: |
-        export SDKVERSION=${{ env.SDK_VERSION }}
-        export SYSROOT=$THEOS/sdks/iPhoneOS${{ env.SDK_VERSION }}.sdk
         make package FINALPACKAGE=1
         
-    - name: Sign IPA
+    - name: Create IPA
       run: |
         cd packages
         for deb in *.deb; do
           dpkg-deb -R "$deb" extracted
           mkdir -p Payload
-          mv extracted/Applications/* Payload/ || true
+          cp -r extracted/Applications/* Payload/ || true
           cp -r extracted/Library Payload/TrollStore.app/ || true
           zip -r "${deb%.*}.ipa" Payload
           rm -rf extracted Payload
@@ -85,21 +73,5 @@ jobs:
           packages/*.deb
         name: TrollStore Enhanced ${{ github.sha }}
         tag_name: v${{ github.run_number }}
-        body: |
-          TrollStore Enhanced Build ${{ github.sha }}
-          
-          Changes in this build:
-          - Full iOS 17.0 Support
-          - Enhanced Security Features
-          - Improved Performance
-          - Extended System Integration
-          - Sileo Integration
-          
-          Installation:
-          1. Download TrollStoreEnhanced.ipa
-          2. Install using TrollStore
-          3. Grant required permissions
-          
-          Note: This build includes all Sileo and system integrations
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

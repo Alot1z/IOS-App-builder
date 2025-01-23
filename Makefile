@@ -1,3 +1,7 @@
+THEOS_PACKAGE_SCHEME = rootless
+THEOS_DEVICE_IP = 127.0.0.1
+THEOS_DEVICE_PORT = 22
+
 ARCHS = arm64 arm64e
 TARGET = iphone:17.0:14.0
 
@@ -24,7 +28,8 @@ include $(THEOS)/makefiles/common.mk
 
 # Project Configuration
 TWEAK_NAME = TrollStoreEnhanced
-TrollStoreEnhanced_FILES = $(wildcard Core/*.m)
+TrollStoreEnhanced_FILES = Core/Tweak.x Core/TSEnvironmentManager.m
+TrollStoreEnhanced_CFLAGS = -fobjc-arc
 TrollStoreEnhanced_FRAMEWORKS = UIKit Foundation Security
 TrollStoreEnhanced_PRIVATE_FRAMEWORKS = MobileCoreServices
 
@@ -38,6 +43,9 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 after-stage::
 	@echo "Applying entitlements..."
 	@ldid -S$(THEOS_STAGING_DIR)/entitlements.plist $(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries/TrollStoreEnhanced.dylib
+
+after-install::
+	install.exec "killall -9 SpringBoard"
 
 # Clean Rules
 clean::
