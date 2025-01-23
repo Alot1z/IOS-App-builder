@@ -579,6 +579,153 @@ TrollStore.app/
 3. View and control running apps
 4. Use quick actions for common tasks
 
+## Environment Variables Guide
+
+### Public Environment Variables
+These variables are safe to modify and commonly used:
+
+| Variable | Description | Default | Toggle |
+|----------|-------------|---------|--------|
+| `TROLLSTORE_PERSIST` | Keep app installed after reboot | 0 | ✓ |
+| `TROLLSTORE_ENTITLEMENTS` | Enable all entitlements | 0 | ✓ |
+| `TROLLSTORE_LOG_LEVEL` | Logging detail (0-4) | 1 | - |
+| `TROLLSTORE_CONTAINER` | Custom container path | Default | - |
+| `TROLLSTORE_BACKUP` | Enable automatic backups | 0 | ✓ |
+| `TROLLSTORE_UPDATE_CHECK` | Auto-check for updates | 1 | ✓ |
+| `TROLLSTORE_CACHE_DIR` | Custom cache directory | Default | - |
+| `TROLLSTORE_TEMP_DIR` | Temporary file location | Default | - |
+| `TROLLSTORE_NO_SANDBOX` | Disable app sandboxing | 0 | ✓ |
+| `TROLLSTORE_DEBUG` | Enable debug logging | 0 | ✓ |
+
+### Private/System Environment Variables 
+These variables affect core functionality - modify with caution:
+
+| Variable | Description | Default | Toggle |
+|----------|-------------|---------|--------|
+| `DYLD_INSERT_LIBRARIES` | Load custom dylibs | Empty | ✓ |
+| `TROLLSTORE_ROOT_PATH` | TrollStore installation path | System | - |
+| `TROLLSTORE_APP_DATA` | App data storage location | System | - |
+| `TROLLSTORE_ORIG_PATH` | Original binary path | System | - |
+| `TROLLSTORE_HOOKS` | Custom hook libraries | Empty | ✓ |
+| `TROLLSTORE_DAEMON` | Daemon configuration | Default | - |
+| `TROLLSTORE_SIGNATURES` | Signature verification | 1 | ✓ |
+| `TROLLSTORE_ENTITLEMENTS_ALL` | Grant all entitlements | 0 | ✓ |
+| `TROLLSTORE_SYSTEM_VERSION` | Target iOS version | Auto | - |
+| `TROLLSTORE_DEVICE_TYPE` | Target device type | Auto | - |
+
+### Using Environment Variables
+
+#### In TrollStore UI
+1. Select an app from the list
+2. Tap "Edit Environment"
+3. You'll see two sections:
+   - Public Variables (Safe to modify)
+   - Private Variables (Use with caution)
+4. Each variable has:
+   - Toggle switch (if applicable)
+   - Information button (ⓘ) showing:
+     * Full description
+     * Default value
+     * Usage examples
+     * Warning if dangerous
+   - Value field (for non-toggle variables)
+
+#### Variable States
+- 🟢 Active & Working
+- 🟡 Active but Needs Restart
+- 🔴 Inactive
+- ⚠️ Warning/Caution Needed
+
+#### Common Configurations
+
+1. **Maximum Freedom**
+```
+TROLLSTORE_PERSIST=1
+TROLLSTORE_ENTITLEMENTS=1
+TROLLSTORE_NO_SANDBOX=1
+```
+
+2. **Maximum Security**
+```
+TROLLSTORE_SIGNATURES=1
+TROLLSTORE_NO_SANDBOX=0
+TROLLSTORE_ENTITLEMENTS=0
+```
+
+3. **Developer Mode**
+```
+TROLLSTORE_DEBUG=1
+TROLLSTORE_LOG_LEVEL=4
+TROLLSTORE_PERSIST=1
+```
+
+#### Saving Changes
+1. After modifying variables, tap "Save"
+2. A popup will show affected components
+3. Tap "Reinstall" to apply changes
+4. Wait for app reregistration
+
+#### Backup & Restore
+- Export: Tap "Export Config" to save current environment
+- Import: Tap "Import Config" to load saved environment
+- Presets: Choose from common configurations
+
+### Variable Details
+
+Each variable can be clicked to show a detailed card:
+
+```
+VARIABLE_NAME
+├── Description: Detailed explanation
+├── Type: Toggle/Text/Number
+├── Default: Default value
+├── Effects:
+│   ├── Components affected
+│   └── Required restarts
+├── Examples:
+│   ├── Common usage
+│   └── Use cases
+└── Warnings:
+    └── Potential risks
+```
+
+### Advanced Usage
+
+#### Combining Variables
+Some variables work together for enhanced functionality:
+
+1. **Enhanced Persistence**
+```
+TROLLSTORE_PERSIST=1
+TROLLSTORE_BACKUP=1
+```
+
+2. **Full Development**
+```
+TROLLSTORE_DEBUG=1
+TROLLSTORE_NO_SANDBOX=1
+TROLLSTORE_ENTITLEMENTS=1
+```
+
+#### Troubleshooting
+
+If an app won't launch after environment changes:
+
+1. Check Logs:
+```
+TROLLSTORE_DEBUG=1
+TROLLSTORE_LOG_LEVEL=4
+```
+
+2. Reset to Default:
+- Tap "Reset All" in Environment Editor
+- Reinstall app
+
+3. Common Issues:
+- 🔴 App crashes: Check TROLLSTORE_ENTITLEMENTS
+- 🔴 No persistence: Verify TROLLSTORE_PERSIST
+- 🔴 Permission denied: Check TROLLSTORE_NO_SANDBOX
+
 ## Build Output Integration
 When building TrollStore Enhanced, new features are compiled and integrated:
 
