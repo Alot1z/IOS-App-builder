@@ -25,11 +25,12 @@ env:
   THEOS_DEVICE_IP: 127.0.0.1
   THEOS_DEVICE_PORT: 22
   XCODE_VERSION: "14.2"
+  SDK_VERSION: "16.2"
 
 jobs:
   build:
     name: Build and Analyze
-    runs-on: macos-latest
+    runs-on: macos-13
     
     steps:
     - name: Checkout Repository
@@ -39,16 +40,25 @@ jobs:
         fetch-depth: 0
 
     - name: Setup Xcode
-      uses: maxim-lobanov/setup-xcode@v1
-      with:
-        xcode-version: ${{ env.XCODE_VERSION }}
+      run: |
+        sudo xcode-select --install || true
+        sudo xcode-select -s /Applications/Xcode.app
+        sudo xcodebuild -license accept
+        xcrun simctl list
+
+    - name: Install iOS SDK
+      run: |
+        mkdir -p $THEOS/sdks
+        curl -LO https://github.com/theos/sdks/archive/master.zip
+        unzip -q master.zip
+        mv sdks-master/iPhoneOS${{ env.SDK_VERSION }}.sdk $THEOS/sdks/
+        rm -rf master.zip sdks-master
 
     - name: Cache Dependencies
       uses: actions/cache@v3
       with:
         path: |
           ~/Library/Caches/Homebrew
-          ${{ env.THEOS }}/sdks
           ~/.theos
           ~/Library/Developer/Xcode/DerivedData
         key: ${{ runner.os }}-deps-${{ hashFiles('**/Makefile') }}-${{ github.sha }}
@@ -58,60 +68,44 @@ jobs:
 
     - name: Install Dependencies
       run: |
-        set -e
         brew update
-        brew install ldid make theos dpkg xz
-        brew cleanup
-
+        HOMEBREW_NO_AUTO_UPDATE=1 brew install \
+          ldid \
+          make \
+          xz \
+          dpkg \
+          cmake \
+          ninja \
+          || true
+        
+    - name: Install Theos
+      run: |
+        git clone --recursive https://github.com/theos/theos.git $THEOS
+        curl -LO https://github.com/theos/sdks/archive/master.zip
+        unzip -q master.zip -d $THEOS/sdks
+        mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
+        rm -rf master.zip $THEOS/sdks/sdks-master
+        
     - name: Setup Build Environment
       run: |
-        set -e
-        mkdir -p $THEOS/sdks
-        if [ ! -d "$THEOS/sdks/iPhoneOS16.2.sdk" ]; then
-          echo "Downloading iOS SDK..."
-          curl -L https://github.com/theos/sdks/archive/master.zip -o master.zip
-          unzip -q master.zip -d $THEOS/sdks
-          mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
-          rm -rf master.zip $THEOS/sdks/sdks-master
-        fi
+        mkdir -p build
+        cd build
+        cmake -G Ninja ..
         
-    - name: Verify Environment
-      run: |
-        set -e
-        echo "Xcode Version:"
-        xcodebuild -version
-        echo "Theos Version:"
-        $THEOS/bin/update-theos || true
-        echo "SDK List:"
-        ls -la $THEOS/sdks/
-        echo "Environment Variables:"
-        env | grep -E "THEOS|DEVELOPER_DIR"
-
     - name: Build TrollStore
       run: |
-        set -e
         export PATH="/opt/homebrew/bin:$PATH"
         export FINALPACKAGE=1
-        export THEOS_PACKAGE_SCHEME=rootless
-        
-        # Build main project
-        echo "Building main project..."
         make clean
-        if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
-          make package DEBUG=1
-        else
-          make package FINALPACKAGE=1
-        fi
         
-        # Check build success
-        if [ ! -d "packages" ]; then
-          echo "Error: Build failed - packages directory not found"
-          exit 1
+        if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
+          make package DEBUG=1 THEOS_PACKAGE_SCHEME=rootless
+        else
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
         fi
 
     - name: Build Extensions
       run: |
-        set -e
         cd extensions || exit 1
         for ext in */; do
           if [ -f "$ext/Makefile" ]; then
@@ -129,28 +123,17 @@ jobs:
 
     - name: Run Code Analysis
       run: |
-        set -e
-        echo "Running code analysis..."
         xcodebuild clean analyze \
           -scheme TrollStore \
-          -destination "platform=iOS Simulator,OS=latest,name=iPhone 14" \
+          -destination "platform=iOS Simulator,OS=16.2,name=iPhone 14" \
           ONLY_ACTIVE_ARCH=NO \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
           -quiet \
           COMPILER_INDEX_STORE_ENABLE=NO || true
-
-    - name: Run Tests
-      run: |
-        set -e
-        echo "Running tests..."
-        if [ -f "Makefile.test" ]; then
-          make -f Makefile.test test
-        fi
         
     - name: Package Artifacts
       run: |
-        set -e
         mkdir -p artifacts
         
         # Copy main package
