@@ -7,27 +7,14 @@ on:
     branches: [ main ]
   workflow_dispatch:
     inputs:
-      build_type:
-        description: 'Build Type'
+      build_mode:
+        description: 'Build Mode'
         required: true
-        default: 'release'
         type: choice
         options:
-        - release
-        - debug
-      ios_version:
-        description: 'iOS Target Version'
-        required: true
-        default: '17.0'
-        type: string
-      build_number:
-        description: 'Build Number'
-        required: false
-        type: string
-      release_notes:
-        description: 'Release Notes'
-        required: false
-        type: string
+          - release
+          - debug
+        default: 'release'
 
 env:
   DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
@@ -42,8 +29,8 @@ jobs:
     env:
       THEOS_DEVICE_IP: 127.0.0.1
       THEOS_DEVICE_PORT: 22
-      SDK_VERSION: ${{ github.event.inputs.ios_version || '17.0' }}
-      BUILD_TYPE: ${{ github.event.inputs.build_type || 'release' }}
+      SDK_VERSION: '17.0'
+      BUILD_TYPE: ${{ github.event.inputs.build_mode || 'release' }}
       
     steps:
     - name: Checkout Code
@@ -174,20 +161,20 @@ jobs:
         files: |
           packages/*.ipa
           packages/*.deb
-        name: TrollStore Enhanced ${{ github.event.inputs.build_number || github.sha }}
+        name: TrollStore Enhanced ${{ github.run_number }}
         tag_name: v${{ github.run_number }}
         body: |
-          TrollStore Enhanced Build ${{ github.event.inputs.build_number || github.sha }}
+          TrollStore Enhanced Build ${{ github.run_number }}
           
           Build Type: ${{ env.BUILD_TYPE }}
           iOS Target: ${{ env.SDK_VERSION }}
           
-          ${{ github.event.inputs.release_notes || 'Changes in this build:
+          Changes in this build:
           - Full iOS 17.0 Support
           - Enhanced Security Features
           - Improved Performance
           - Extended System Integration
-          - Advanced Entitlements' }}
+          - Advanced Entitlements
           
           Installation:
           1. Download TrollStoreEnhanced.ipa
