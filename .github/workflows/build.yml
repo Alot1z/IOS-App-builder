@@ -3,70 +3,175 @@ name: Build TrollStore Enhanced
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - debug
+          - release
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+  THEOS: /opt/theos
+  THEOS_DEVICE_IP: 127.0.0.1
+  THEOS_DEVICE_PORT: 22
 
 jobs:
   build:
     name: Build and Analyze
     runs-on: macos-latest
-
+    
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout Repository
+      uses: actions/checkout@v3
       with:
         submodules: recursive
+        fetch-depth: 0
 
-    - name: Select Xcode
-      run: sudo xcode-select -s /Applications/Xcode.app
+    - name: Cache Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/Library/Caches/Homebrew
+          ${{ env.THEOS }}/sdks
+          ~/.theos
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/Makefile') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
+
+    - name: Select Xcode Version
+      run: |
+        sudo xcode-select -s /Applications/Xcode.app
+        xcodebuild -version
 
     - name: Install Dependencies
       run: |
         brew install ldid
         brew install make
         brew install theos
+        brew install dpkg
+        brew install xz
         
     - name: Setup Build Environment
       run: |
         mkdir -p $THEOS/sdks
-        curl -LO https://github.com/theos/sdks/archive/refs/heads/master.zip
-        unzip master.zip -d $THEOS/sdks
-        mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
-        rm -rf master.zip $THEOS/sdks/sdks-master
+        if [ ! -d "$THEOS/sdks/iPhoneOS16.2.sdk" ]; then
+          curl -LO https://github.com/theos/sdks/archive/refs/heads/master.zip
+          unzip master.zip -d $THEOS/sdks
+          mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
+          rm -rf master.zip $THEOS/sdks/sdks-master
+        fi
+        
+    - name: Verify Environment
+      run: |
+        echo "Xcode Version:"
+        xcodebuild -version
+        echo "Theos Version:"
+        $THEOS/bin/update-theos
+        echo "SDK List:"
+        ls -la $THEOS/sdks/
 
     - name: Build TrollStore
       run: |
+        set -e
+        export PATH="/opt/homebrew/bin:$PATH"
+        export FINALPACKAGE=1
+        export THEOS_PACKAGE_SCHEME=rootless
+        
+        # Build main project
+        echo "Building main project..."
+        make clean
         make package FINALPACKAGE=1
+        
+        # Check build success
+        if [ ! -d "packages" ]; then
+          echo "Error: Build failed - packages directory not found"
+          exit 1
+        fi
         
     - name: Build Extensions
       run: |
+        set -e
         cd extensions
         for ext in */; do
           if [ -f "$ext/Makefile" ]; then
+            echo "Building extension: $ext"
             cd "$ext"
+            make clean
             make package FINALPACKAGE=1
             cd ..
           fi
         done
 
-    - name: Run Analysis
+    - name: Run Code Analysis
       run: |
+        set -e
+        echo "Running code analysis..."
         xcodebuild clean analyze \
           -scheme TrollStore \
           -destination "platform=iOS Simulator,OS=latest,name=iPhone 14" \
           ONLY_ACTIVE_ARCH=NO \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_ALLOWED=NO \
+          -quiet \
+          COMPILER_INDEX_STORE_ENABLE=NO
 
+    - name: Run Tests
+      run: |
+        set -e
+        echo "Running tests..."
+        # Add your test commands here
+        # Example: xcodebuild test -scheme TrollStore
+        
     - name: Package Artifacts
       run: |
+        set -e
         mkdir -p artifacts
-        cp packages/*.deb artifacts/
-        cp extensions/*/packages/*.deb artifacts/ 2>/dev/null || true
+        
+        # Copy main package
+        if [ -d "packages" ]; then
+          cp packages/*.deb artifacts/
+        fi
+        
+        # Copy extension packages
+        find extensions -name "*.deb" -exec cp {} artifacts/ \;
+        
+        # Create version info
+        git describe --tags --always > artifacts/version.txt
+        date > artifacts/build_date.txt
+        
+        # Create checksums
+        cd artifacts
+        shasum -a 256 *.deb > SHA256SUMS.txt
         
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v3
       with:
         name: TrollStore-Enhanced-Build
-        path: artifacts/*.deb
+        path: |
+          artifacts/*.deb
+          artifacts/version.txt
+          artifacts/build_date.txt
+          artifacts/SHA256SUMS.txt
         if-no-files-found: error
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/*.deb
+          artifacts/SHA256SUMS.txt
+        generate_release_notes: true
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
