@@ -6,6 +6,28 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+        - release
+        - debug
+      ios_version:
+        description: 'iOS Target Version'
+        required: true
+        default: '17.0'
+        type: string
+      build_number:
+        description: 'Build Number'
+        required: false
+        type: string
+      release_notes:
+        description: 'Release Notes'
+        required: false
+        type: string
 
 env:
   DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
@@ -20,7 +42,8 @@ jobs:
     env:
       THEOS_DEVICE_IP: 127.0.0.1
       THEOS_DEVICE_PORT: 22
-      SDK_VERSION: "17.0"
+      SDK_VERSION: ${{ github.event.inputs.ios_version || '17.0' }}
+      BUILD_TYPE: ${{ github.event.inputs.build_type || 'release' }}
       
     steps:
     - name: Checkout Code
@@ -91,7 +114,11 @@ jobs:
       run: |
         echo "Building TrollStore core..."
         make clean
-        make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+        if [ "${{ env.BUILD_TYPE }}" = "debug" ]; then
+          make package DEBUG=1
+        else
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+        fi
         
     - name: Process Binaries
       run: |
@@ -134,30 +161,33 @@ jobs:
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: TrollStoreEnhanced
+        name: TrollStoreEnhanced-${{ env.BUILD_TYPE }}
         path: |
           packages/*.ipa
           packages/*.deb
         if-no-files-found: error
         
     - name: Create GitHub Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
       uses: softprops/action-gh-release@v2
       with:
         files: |
           packages/*.ipa
           packages/*.deb
-        name: TrollStore Enhanced ${{ github.sha }}
+        name: TrollStore Enhanced ${{ github.event.inputs.build_number || github.sha }}
         tag_name: v${{ github.run_number }}
         body: |
-          TrollStore Enhanced Build ${{ github.sha }}
+          TrollStore Enhanced Build ${{ github.event.inputs.build_number || github.sha }}
           
-          Changes in this build:
+          Build Type: ${{ env.BUILD_TYPE }}
+          iOS Target: ${{ env.SDK_VERSION }}
+          
+          ${{ github.event.inputs.release_notes || 'Changes in this build:
           - Full iOS 17.0 Support
           - Enhanced Security Features
           - Improved Performance
           - Extended System Integration
-          - Advanced Entitlements
+          - Advanced Entitlements' }}
           
           Installation:
           1. Download TrollStoreEnhanced.ipa
