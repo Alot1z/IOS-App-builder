@@ -6,26 +6,46 @@
                 description:(NSString *)description
                defaultValue:(NSString *)defaultValue
                  isToggle:(BOOL)isToggle
-                isPrivate:(BOOL)isPrivate {
+                category:(TSEnvironmentCategory)category {
     if (self = [super init]) {
         _name = name;
         _description = description;
         _defaultValue = defaultValue;
         _isToggle = isToggle;
-        _isPrivate = isPrivate;
+        _category = category;
         _currentValue = defaultValue;
         _examples = @[];
         _warnings = @[];
         _affectedComponents = @[];
+        _state = TSVariableStateInactive;
+        _dependencies = @[];
+        _conflicts = @[];
+        _isDynamic = NO;
+        _dynamicBehavior = @{};
     }
     return self;
+}
+
+- (BOOL)validateValue:(NSString *)value {
+    // Implement validation logic based on variable type
+    return YES;
+}
+
+- (BOOL)canTransitionToState:(TSVariableState)newState {
+    // Check if state transition is valid
+    return YES;
+}
+
+- (NSArray<NSString *> *)requiredRestarts {
+    return _affectedComponents;
 }
 
 @end
 
 @interface TSEnvironmentManager ()
-@property (nonatomic, strong) NSMutableDictionary *variables;
-@property (nonatomic, strong) NSMutableDictionary *presets;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, TSEnvironmentVariable *> *variables;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary *> *presets;
+@property (nonatomic, strong) NSTimer *monitoringTimer;
 @end
 
 @implementation TSEnvironmentManager
@@ -52,90 +72,126 @@
     self.variables = [NSMutableDictionary dictionary];
     
     // Public Variables
-    [self addVariable:[[TSEnvironmentVariable alloc] initWithName:@"TROLLSTORE_PERSIST"
-                                                    description:@"Keep app installed after reboot"
-                                                   defaultValue:@"0"
-                                                     isToggle:YES
-                                                    isPrivate:NO]];
+    [self addVariable:[[TSEnvironmentVariable alloc] 
+        initWithName:@"TROLLSTORE_PERSIST"
+        description:@"Keep app installed after reboot"
+        defaultValue:@"0"
+        isToggle:YES
+        category:TSEnvironmentCategoryPublic]];
     
-    [self addVariable:[[TSEnvironmentVariable alloc] initWithName:@"TROLLSTORE_ENTITLEMENTS"
-                                                    description:@"Enable all entitlements"
-                                                   defaultValue:@"0"
-                                                     isToggle:YES
-                                                    isPrivate:NO]];
+    // Security Variables
+    [self addVariable:[[TSEnvironmentVariable alloc]
+        initWithName:@"TROLLSTORE_SECURITY_LEVEL"
+        description:@"Security enforcement level (0-3)"
+        defaultValue:@"2"
+        isToggle:NO
+        category:TSEnvironmentCategorySecurity]];
+        
+    // Development Variables
+    [self addVariable:[[TSEnvironmentVariable alloc]
+        initWithName:@"TROLLSTORE_DEV_MODE"
+        description:@"Enable developer features"
+        defaultValue:@"0"
+        isToggle:YES
+        category:TSEnvironmentCategoryDevelopment]];
+        
+    // Network Variables
+    [self addVariable:[[TSEnvironmentVariable alloc]
+        initWithName:@"TROLLSTORE_PROXY_ENABLED"
+        description:@"Use custom proxy"
+        defaultValue:@"0"
+        isToggle:YES
+        category:TSEnvironmentCategoryNetwork]];
+        
+    // Performance Variables
+    [self addVariable:[[TSEnvironmentVariable alloc]
+        initWithName:@"TROLLSTORE_CPU_LIMIT"
+        description:@"CPU usage limit (%)"
+        defaultValue:@"100"
+        isToggle:NO
+        category:TSEnvironmentCategoryPerformance]];
+        
+    // Integration Variables
+    [self addVariable:[[TSEnvironmentVariable alloc]
+        initWithName:@"TROLLSTORE_URL_SCHEME"
+        description:@"Custom URL scheme"
+        defaultValue:@"trollstore"
+        isToggle:NO
+        category:TSEnvironmentCategoryIntegration]];
+        
+    // Recovery Variables
+    [self addVariable:[[TSEnvironmentVariable alloc]
+        initWithName:@"TROLLSTORE_RECOVERY_MODE"
+        description:@"Enable recovery mode"
+        defaultValue:@"0"
+        isToggle:YES
+        category:TSEnvironmentCategoryRecovery]];
     
-    // Add more public variables...
-    
-    // Private Variables
-    [self addVariable:[[TSEnvironmentVariable alloc] initWithName:@"DYLD_INSERT_LIBRARIES"
-                                                    description:@"Load custom dylibs"
-                                                   defaultValue:@""
-                                                     isToggle:YES
-                                                    isPrivate:YES]];
-    
-    // Add more private variables...
+    // Add more variables for each category...
 }
 
-- (void)addVariable:(TSEnvironmentVariable *)variable {
-    self.variables[variable.name] = variable;
+#pragma mark - Category Management
+
+- (NSArray<TSEnvironmentVariable *> *)variablesInCategory:(TSEnvironmentCategory)category {
+    return [self.variables.allValues filteredArrayUsingPredicate:
+            [NSPredicate predicateWithFormat:@"category == %@", @(category)]];
 }
 
-- (void)setupPresets {
-    self.presets = [@{
-        @"Maximum Freedom": @{
-            @"TROLLSTORE_PERSIST": @"1",
-            @"TROLLSTORE_ENTITLEMENTS": @"1",
-            @"TROLLSTORE_NO_SANDBOX": @"1"
-        },
-        @"Maximum Security": @{
-            @"TROLLSTORE_SIGNATURES": @"1",
-            @"TROLLSTORE_NO_SANDBOX": @"0",
-            @"TROLLSTORE_ENTITLEMENTS": @"0"
-        },
-        @"Developer Mode": @{
-            @"TROLLSTORE_DEBUG": @"1",
-            @"TROLLSTORE_LOG_LEVEL": @"4",
-            @"TROLLSTORE_PERSIST": @"1"
-        }
-    } mutableCopy];
+- (TSEnvironmentCategory)categoryForVariable:(NSString *)name {
+    TSEnvironmentVariable *variable = [self variableForName:name];
+    return variable ? variable.category : TSEnvironmentCategoryPublic;
 }
 
 #pragma mark - Variable Management
 
-- (NSArray<TSEnvironmentVariable *> *)publicVariables {
-    return [self.variables.allValues filteredArrayUsingPredicate:
-            [NSPredicate predicateWithFormat:@"isPrivate == NO"]];
-}
-
-- (NSArray<TSEnvironmentVariable *> *)privateVariables {
-    return [self.variables.allValues filteredArrayUsingPredicate:
-            [NSPredicate predicateWithFormat:@"isPrivate == YES"]];
+- (NSArray<TSEnvironmentVariable *> *)allVariables {
+    return self.variables.allValues;
 }
 
 - (TSEnvironmentVariable *)variableForName:(NSString *)name {
     return self.variables[name];
 }
 
+- (BOOL)addVariable:(TSEnvironmentVariable *)variable {
+    if (!variable || !variable.name) return NO;
+    self.variables[variable.name] = variable;
+    return YES;
+}
+
+- (BOOL)removeVariable:(NSString *)name {
+    if (!name || !self.variables[name]) return NO;
+    [self.variables removeObjectForKey:name];
+    return YES;
+}
+
 #pragma mark - Value Management
 
 - (void)setValue:(NSString *)value forVariable:(NSString *)name {
     TSEnvironmentVariable *variable = [self variableForName:name];
-    if (variable) {
+    if (variable && [variable validateValue:value]) {
         variable.currentValue = value;
+        variable.state = TSVariableStateUpdating;
         [self saveConfiguration];
+        [self updateDynamicVariables];
     }
 }
 
-- (NSString *)valueForVariable:(NSString *)name {
+#pragma mark - State Management
+
+- (TSVariableState)stateForVariable:(NSString *)name {
     TSEnvironmentVariable *variable = [self variableForName:name];
-    return variable ? variable.currentValue : nil;
+    return variable ? variable.state : TSVariableStateInactive;
 }
 
-- (void)resetAllVariables {
-    for (TSEnvironmentVariable *variable in self.variables.allValues) {
-        variable.currentValue = variable.defaultValue;
+- (BOOL)activateVariable:(NSString *)name {
+    TSEnvironmentVariable *variable = [self variableForName:name];
+    if (!variable || ![self checkDependencies:name]) return NO;
+    
+    if ([variable canTransitionToState:TSVariableStateActive]) {
+        variable.state = TSVariableStateActive;
+        return YES;
     }
-    [self saveConfiguration];
+    return NO;
 }
 
 #pragma mark - Configuration Management
@@ -144,7 +200,11 @@
     NSMutableDictionary *config = [NSMutableDictionary dictionary];
     for (TSEnvironmentVariable *variable in self.variables.allValues) {
         if (![variable.currentValue isEqualToString:variable.defaultValue]) {
-            config[variable.name] = variable.currentValue;
+            config[variable.name] = @{
+                @"value": variable.currentValue,
+                @"state": @(variable.state),
+                @"category": @(variable.category)
+            };
         }
     }
     
@@ -152,107 +212,78 @@
     [config writeToFile:configPath atomically:YES];
 }
 
-- (void)loadConfiguration {
-    NSString *configPath = [self configurationPath];
-    NSDictionary *config = [NSDictionary dictionaryWithContentsOfFile:configPath];
+#pragma mark - Dependencies
+
+- (BOOL)checkDependencies:(NSString *)variableName {
+    TSEnvironmentVariable *variable = [self variableForName:variableName];
+    if (!variable) return NO;
     
-    if (config) {
-        for (NSString *name in config) {
-            TSEnvironmentVariable *variable = [self variableForName:name];
-            if (variable) {
-                variable.currentValue = config[name];
-            }
-        }
+    for (NSString *depName in variable.dependencies) {
+        TSEnvironmentVariable *dep = [self variableForName:depName];
+        if (!dep || dep.state != TSVariableStateActive) return NO;
     }
+    
+    return YES;
 }
 
-- (NSString *)configurationPath {
-    NSString *appSupport = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
-    return [appSupport stringByAppendingPathComponent:@"TSEnvironment.plist"];
-}
+#pragma mark - Dynamic Variables
 
-- (void)exportConfiguration:(NSString *)path {
-    NSMutableDictionary *config = [NSMutableDictionary dictionary];
+- (void)updateDynamicVariables {
     for (TSEnvironmentVariable *variable in self.variables.allValues) {
-        config[variable.name] = @{
-            @"value": variable.currentValue,
-            @"isPrivate": @(variable.isPrivate),
-            @"isToggle": @(variable.isToggle)
-        };
-    }
-    
-    [config writeToFile:path atomically:YES];
-}
-
-- (void)importConfiguration:(NSString *)path {
-    NSDictionary *config = [NSDictionary dictionaryWithContentsOfFile:path];
-    if (!config) return;
-    
-    for (NSString *name in config) {
-        NSDictionary *varConfig = config[name];
-        TSEnvironmentVariable *variable = [self variableForName:name];
-        if (variable) {
-            variable.currentValue = varConfig[@"value"];
+        if (variable.isDynamic) {
+            // Update dynamic variables based on their behavior
+            [self updateDynamicVariable:variable];
         }
     }
-    
-    [self saveConfiguration];
 }
 
-#pragma mark - Presets
-
-- (void)applyPreset:(NSString *)presetName {
-    NSDictionary *preset = self.presets[presetName];
-    if (!preset) return;
+- (void)updateDynamicVariable:(TSEnvironmentVariable *)variable {
+    if (!variable.isDynamic) return;
     
-    for (NSString *name in preset) {
-        [self setValue:preset[name] forVariable:name];
-    }
-}
-
-- (NSDictionary *)availablePresets {
-    return [self.presets copy];
-}
-
-#pragma mark - Status
-
-- (NSDictionary *)variableStatus {
-    NSMutableDictionary *status = [NSMutableDictionary dictionary];
-    
-    for (TSEnvironmentVariable *variable in self.variables.allValues) {
-        if (![variable.currentValue isEqualToString:variable.defaultValue]) {
-            status[variable.name] = @{
-                @"changed": @YES,
-                @"needsRestart": @([self variableNeedsRestart:variable.name])
-            };
+    // Example dynamic update based on system state
+    if ([variable.name isEqualToString:@"TROLLSTORE_POWER_MODE"]) {
+        // Update based on battery level
+        float batteryLevel = [UIDevice currentDevice].batteryLevel;
+        if (batteryLevel < 0.2) {
+            variable.currentValue = @"power_save";
+        } else {
+            variable.currentValue = @"performance";
         }
     }
-    
-    return status;
 }
 
-- (BOOL)variableNeedsRestart:(NSString *)name {
-    // Add logic for which variables need restart
-    NSArray *restartNeeded = @[
-        @"TROLLSTORE_PERSIST",
-        @"TROLLSTORE_ENTITLEMENTS",
-        @"DYLD_INSERT_LIBRARIES"
-    ];
-    
-    return [restartNeeded containsObject:name];
+#pragma mark - Monitoring
+
+- (void)startMonitoring {
+    [self stopMonitoring];
+    self.monitoringTimer = [NSTimer scheduledTimerWithTimeInterval:5.0
+                                                           target:self
+                                                         selector:@selector(monitoringTick)
+                                                         userInfo:nil
+                                                          repeats:YES];
 }
 
-- (BOOL)needsReinstall {
-    NSDictionary *status = [self variableStatus];
-    
-    for (NSString *name in status) {
-        NSDictionary *varStatus = status[name];
-        if ([varStatus[@"needsRestart"] boolValue]) {
-            return YES;
-        }
+- (void)stopMonitoring {
+    [self.monitoringTimer invalidate];
+    self.monitoringTimer = nil;
+}
+
+- (void)monitoringTick {
+    [self updateDynamicVariables];
+    [self validateConfiguration];
+}
+
+#pragma mark - Security
+
+- (BOOL)isSecureVariable:(NSString *)name {
+    TSEnvironmentVariable *variable = [self variableForName:name];
+    return variable && variable.category == TSEnvironmentCategorySecurity;
+}
+
+- (void)lockSecureVariables {
+    for (TSEnvironmentVariable *variable in [self variablesInCategory:TSEnvironmentCategorySecurity]) {
+        variable.state = TSVariableStateInactive;
     }
-    
-    return NO;
 }
 
 @end

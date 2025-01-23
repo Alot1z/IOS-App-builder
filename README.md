@@ -610,7 +610,7 @@ For developers and debugging:
 | `TROLLSTORE_UI_DEBUG` | Debug UI elements | 0 | ✓ |
 
 ### 5. Network Variables
-Control network behavior:
+Control network behavior and connectivity:
 
 | Variable | Description | Default | Toggle |
 |----------|-------------|---------|--------|
@@ -623,7 +623,7 @@ Control network behavior:
 | `TROLLSTORE_NET_PRIORITY` | Network priority (0-3) | 1 | - |
 
 ### 6. Performance Variables
-Optimize app performance:
+Optimize app performance and resource usage:
 
 | Variable | Description | Default | Toggle |
 |----------|-------------|---------|--------|
@@ -735,3 +735,215 @@ TROLLSTORE_DEBUG=1
 - Original TrollStore by @opa334
 - Enhanced functionality by Alot1z
 - Version 1.0.3: Advanced system integration
+
+## TrollStore Enhanced Environment Variables
+
+This document provides a comprehensive guide to all environment variables available in TrollStore Enhanced. Variables are organized by category and include detailed descriptions of their purpose, behavior, and usage.
+
+## Categories Overview
+
+Environment variables are grouped into the following categories:
+
+1. Public Variables - User-configurable settings safe for modification
+2. Private/System Variables - Core functionality settings requiring caution
+3. Security Variables - Control app security and permissions
+4. Development Variables - Tools for debugging and development
+5. Network Variables - Control network behavior
+6. Performance Variables - Optimize app performance
+7. Integration Variables - Settings for system integration
+8. Recovery Variables - Tools for troubleshooting and recovery
+
+## Variable Details
+
+### Public Variables
+
+These variables are safe for users to modify and control basic app behavior:
+
+- `TROLLSTORE_PERSIST`
+  - Description: Keep app installed after reboot
+  - Default: "0"
+  - Type: Toggle
+  - Example: Set to "1" to persist after reboot
+
+### Security Variables
+
+Control app security and permission levels:
+
+- `TROLLSTORE_SECURITY_LEVEL`
+  - Description: Security enforcement level
+  - Default: "2"
+  - Values: 0 (None) to 3 (Maximum)
+  - Warning: Lower values reduce security
+
+### Development Variables
+
+Tools for developers and debugging:
+
+- `TROLLSTORE_DEV_MODE`
+  - Description: Enable developer features
+  - Default: "0"
+  - Type: Toggle
+  - Note: Enables logging and debug tools
+
+### Network Variables
+
+Control network behavior and connectivity:
+
+- `TROLLSTORE_PROXY_ENABLED`
+  - Description: Use custom proxy
+  - Default: "0"
+  - Type: Toggle
+  - Related: TROLLSTORE_PROXY_URL
+
+### Performance Variables
+
+Optimize app performance and resource usage:
+
+- `TROLLSTORE_CPU_LIMIT`
+  - Description: CPU usage limit
+  - Default: "100"
+  - Range: 0-100
+  - Unit: Percentage
+
+### Integration Variables
+
+Control system integration features:
+
+- `TROLLSTORE_URL_SCHEME`
+  - Description: Custom URL scheme
+  - Default: "trollstore"
+  - Format: [a-z0-9]+
+
+### Recovery Variables
+
+Tools for troubleshooting and recovery:
+
+- `TROLLSTORE_RECOVERY_MODE`
+  - Description: Enable recovery mode
+  - Default: "0"
+  - Type: Toggle
+  - Warning: May affect stability
+
+## Variable Inheritance
+
+Variables can inherit properties and behaviors:
+
+1. Category Inheritance
+   - Variables inherit default behaviors from their category
+   - Category-specific validation rules apply
+
+2. Value Inheritance
+   - Some variables inherit values from system settings
+   - Changes to parent values affect child variables
+
+## Dynamic Variables
+
+Variables that can change based on context:
+
+1. System State
+   - Battery level triggers
+   - Network connectivity changes
+   - Storage space thresholds
+
+2. User Activity
+   - Usage patterns
+   - Time-based changes
+   - Location-based adjustments
+
+## Variable States
+
+Variables can exist in multiple states:
+
+1. `TSVariableStateInactive`
+   - Variable is defined but not in use
+   - Default values apply
+
+2. `TSVariableStatePending`
+   - Change requested but not applied
+   - Waiting for conditions or approval
+
+3. `TSVariableStateActive`
+   - Variable is in use and affecting system
+   - Current value is being applied
+
+4. `TSVariableStateUpdating`
+   - Value is being changed
+   - Temporary state during transitions
+
+## Interaction Rules
+
+Guidelines for variable interactions:
+
+1. Dependencies
+   - Some variables require others to be active
+   - Check dependency chain before changes
+
+2. Conflicts
+   - Some variables cannot be active together
+   - System prevents conflicting states
+
+3. Validation
+   - Type-specific validation rules
+   - Range and format checking
+   - Security validation for sensitive variables
+
+## Security Considerations
+
+Important security guidelines:
+
+1. Private Variables
+   - Modification requires elevated privileges
+   - Changes are logged and monitored
+
+2. Security Variables
+   - Cannot be modified while app is running
+   - Require app restart to take effect
+
+3. Recovery Variables
+   - May bypass normal security checks
+   - Use with caution
+
+## Best Practices
+
+Recommendations for variable management:
+
+1. Documentation
+   - Document all custom values
+   - Keep track of changes
+
+2. Testing
+   - Test changes in safe environment
+   - Verify behavior before production
+
+3. Monitoring
+   - Monitor variable states
+   - Track performance impact
+
+4. Recovery
+   - Keep backup of working configuration
+   - Know how to reset to defaults
+
+## Examples
+
+Common usage examples:
+
+```bash
+# Enable developer mode
+TROLLSTORE_DEV_MODE=1
+
+# Set maximum security
+TROLLSTORE_SECURITY_LEVEL=3
+
+# Custom URL scheme
+TROLLSTORE_URL_SCHEME=myapp
+```
+
+## Support
+
+For help with environment variables:
+
+1. Check documentation first
+2. Use recovery mode if needed
+3. Contact support for assistance
+
+Remember to always back up your configuration before making changes to environment variables.
