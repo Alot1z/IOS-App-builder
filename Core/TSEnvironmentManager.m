@@ -1,5 +1,44 @@
 #import "TSEnvironmentManager.h"
 
+@implementation TSSystemInfo
+
++ (TSArchitecture)currentArchitecture {
+#if defined(__arm64e__)
+    return TSArchitectureArm64e;
+#elif defined(__arm64__)
+    return TSArchitectureArm64;
+#else
+    return TSArchitectureUnknown;
+#endif
+}
+
++ (float)systemVersion {
+    return [UIDevice currentDevice].systemVersion.floatValue;
+}
+
++ (BOOL)isSupported {
+    float version = [self systemVersion];
+    return version >= TROLLSTORE_MIN_IOS_VERSION && 
+           version <= TROLLSTORE_MAX_IOS_VERSION;
+}
+
++ (NSString *)deviceModel {
+    return [UIDevice currentDevice].model;
+}
+
++ (uint64_t)availableMemory {
+    return NSProcessInfo.processInfo.physicalMemory;
+}
+
++ (uint64_t)availableStorage {
+    NSError *error = nil;
+    NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfFileSystemForPath:NSHomeDirectory() error:&error];
+    if (error) return 0;
+    return [attrs[NSFileSystemFreeSize] unsignedLongLongValue];
+}
+
+@end
+
 @implementation TSEnvironmentVariable
 
 - (instancetype)initWithName:(NSString *)name
@@ -22,22 +61,51 @@
         _conflicts = @[];
         _isDynamic = NO;
         _dynamicBehavior = @{};
+        _requiredSecurityLevel = TSSecurityLevelBasic;
+        _requiresRestart = NO;
+        _supportedArchitectures = @[@(TSArchitectureArm64), @(TSArchitectureArm64e)];
+        _supportedVersions = @[@(14.0), @(17.0)];
     }
     return self;
 }
 
 - (BOOL)validateValue:(NSString *)value {
-    // Implement validation logic based on variable type
+    if (!value) return NO;
+    
+    // Check if supported on current system
+    if (![self isSupported]) return NO;
+    
+    // Toggle validation
+    if (self.isToggle) {
+        return [value isEqualToString:@"0"] || [value isEqualToString:@"1"];
+    }
+    
     return YES;
 }
 
-- (BOOL)canTransitionToState:(TSVariableState)newState {
-    // Check if state transition is valid
+- (BOOL)isSupported {
+    // Check iOS version support
+    float currentVersion = [TSSystemInfo systemVersion];
+    NSNumber *minVersion = [self.supportedVersions firstObject];
+    NSNumber *maxVersion = [self.supportedVersions lastObject];
+    
+    if (currentVersion < minVersion.floatValue || 
+        currentVersion > maxVersion.floatValue) {
+        return NO;
+    }
+    
+    // Check architecture support
+    TSArchitecture currentArch = [TSSystemInfo currentArchitecture];
+    NSNumber *archNumber = @(currentArch);
+    if (![self.supportedArchitectures containsObject:archNumber]) {
+        return NO;
+    }
+    
     return YES;
 }
 
-- (NSArray<NSString *> *)requiredRestarts {
-    return _affectedComponents;
+- (BOOL)requiresSecurityBypass {
+    return self.requiredSecurityLevel > TSSecurityLevelBasic;
 }
 
 @end
@@ -46,6 +114,7 @@
 @property (nonatomic, strong) NSMutableDictionary<NSString *, TSEnvironmentVariable *> *variables;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary *> *presets;
 @property (nonatomic, strong) NSTimer *monitoringTimer;
+@property (nonatomic, assign) TSSecurityLevel securityLevel;
 @end
 
 @implementation TSEnvironmentManager
@@ -61,11 +130,41 @@
 
 - (instancetype)init {
     if (self = [super init]) {
+        _securityLevel = TSSecurityLevelBasic;
         [self setupVariables];
         [self setupPresets];
         [self loadConfiguration];
+        
+        // Check system compatibility
+        if (![self checkSystemCompatibility]) {
+            NSLog(@"Warning: System may not be fully compatible");
+        }
     }
     return self;
+}
+
+- (BOOL)checkSystemCompatibility {
+    // Check iOS version
+    if (![TSSystemInfo isSupported]) {
+        return NO;
+    }
+    
+    // Check architecture
+    if ([TSSystemInfo currentArchitecture] == TSArchitectureUnknown) {
+        return NO;
+    }
+    
+    // Check available memory
+    if ([TSSystemInfo availableMemory] < 100 * 1024 * 1024) { // 100MB
+        return NO;
+    }
+    
+    // Check available storage
+    if ([TSSystemInfo availableStorage] < 50 * 1024 * 1024) { // 50MB
+        return NO;
+    }
+    
+    return YES;
 }
 
 - (void)setupVariables {
@@ -80,20 +179,24 @@
         category:TSEnvironmentCategoryPublic]];
     
     // Security Variables
-    [self addVariable:[[TSEnvironmentVariable alloc]
+    TSEnvironmentVariable *securityVar = [[TSEnvironmentVariable alloc]
         initWithName:@"TROLLSTORE_SECURITY_LEVEL"
         description:@"Security enforcement level (0-3)"
         defaultValue:@"2"
         isToggle:NO
-        category:TSEnvironmentCategorySecurity]];
+        category:TSEnvironmentCategorySecurity];
+    securityVar.requiredSecurityLevel = TSSecurityLevelEnhanced;
+    [self addVariable:securityVar];
         
     // Development Variables
-    [self addVariable:[[TSEnvironmentVariable alloc]
+    TSEnvironmentVariable *devVar = [[TSEnvironmentVariable alloc]
         initWithName:@"TROLLSTORE_DEV_MODE"
         description:@"Enable developer features"
         defaultValue:@"0"
         isToggle:YES
-        category:TSEnvironmentCategoryDevelopment]];
+        category:TSEnvironmentCategoryDevelopment];
+    devVar.requiresRestart = YES;
+    [self addVariable:devVar];
         
     // Network Variables
     [self addVariable:[[TSEnvironmentVariable alloc]
@@ -104,12 +207,14 @@
         category:TSEnvironmentCategoryNetwork]];
         
     // Performance Variables
-    [self addVariable:[[TSEnvironmentVariable alloc]
+    TSEnvironmentVariable *perfVar = [[TSEnvironmentVariable alloc]
         initWithName:@"TROLLSTORE_CPU_LIMIT"
         description:@"CPU usage limit (%)"
         defaultValue:@"100"
         isToggle:NO
-        category:TSEnvironmentCategoryPerformance]];
+        category:TSEnvironmentCategoryPerformance];
+    perfVar.isDynamic = YES;
+    [self addVariable:perfVar];
         
     // Integration Variables
     [self addVariable:[[TSEnvironmentVariable alloc]
@@ -120,136 +225,66 @@
         category:TSEnvironmentCategoryIntegration]];
         
     // Recovery Variables
-    [self addVariable:[[TSEnvironmentVariable alloc]
+    TSEnvironmentVariable *recoveryVar = [[TSEnvironmentVariable alloc]
         initWithName:@"TROLLSTORE_RECOVERY_MODE"
         description:@"Enable recovery mode"
         defaultValue:@"0"
         isToggle:YES
-        category:TSEnvironmentCategoryRecovery]];
+        category:TSEnvironmentCategoryRecovery];
+    recoveryVar.requiredSecurityLevel = TSSecurityLevelMaximum;
+    recoveryVar.requiresRestart = YES;
+    [self addVariable:recoveryVar];
+}
+
+#pragma mark - Security Management
+
+- (BOOL)setSecurityLevel:(TSSecurityLevel)level {
+    if (level > TSSecurityLevelMaximum) return NO;
     
-    // Add more variables for each category...
-}
-
-#pragma mark - Category Management
-
-- (NSArray<TSEnvironmentVariable *> *)variablesInCategory:(TSEnvironmentCategory)category {
-    return [self.variables.allValues filteredArrayUsingPredicate:
-            [NSPredicate predicateWithFormat:@"category == %@", @(category)]];
-}
-
-- (TSEnvironmentCategory)categoryForVariable:(NSString *)name {
-    TSEnvironmentVariable *variable = [self variableForName:name];
-    return variable ? variable.category : TSEnvironmentCategoryPublic;
-}
-
-#pragma mark - Variable Management
-
-- (NSArray<TSEnvironmentVariable *> *)allVariables {
-    return self.variables.allValues;
-}
-
-- (TSEnvironmentVariable *)variableForName:(NSString *)name {
-    return self.variables[name];
-}
-
-- (BOOL)addVariable:(TSEnvironmentVariable *)variable {
-    if (!variable || !variable.name) return NO;
-    self.variables[variable.name] = variable;
+    self.securityLevel = level;
+    [self updateSecurityState];
     return YES;
 }
 
-- (BOOL)removeVariable:(NSString *)name {
-    if (!name || !self.variables[name]) return NO;
-    [self.variables removeObjectForKey:name];
-    return YES;
-}
-
-#pragma mark - Value Management
-
-- (void)setValue:(NSString *)value forVariable:(NSString *)name {
-    TSEnvironmentVariable *variable = [self variableForName:name];
-    if (variable && [variable validateValue:value]) {
-        variable.currentValue = value;
-        variable.state = TSVariableStateUpdating;
-        [self saveConfiguration];
-        [self updateDynamicVariables];
-    }
-}
-
-#pragma mark - State Management
-
-- (TSVariableState)stateForVariable:(NSString *)name {
-    TSEnvironmentVariable *variable = [self variableForName:name];
-    return variable ? variable.state : TSVariableStateInactive;
-}
-
-- (BOOL)activateVariable:(NSString *)name {
-    TSEnvironmentVariable *variable = [self variableForName:name];
-    if (!variable || ![self checkDependencies:name]) return NO;
-    
-    if ([variable canTransitionToState:TSVariableStateActive]) {
-        variable.state = TSVariableStateActive;
-        return YES;
-    }
-    return NO;
-}
-
-#pragma mark - Configuration Management
-
-- (void)saveConfiguration {
-    NSMutableDictionary *config = [NSMutableDictionary dictionary];
-    for (TSEnvironmentVariable *variable in self.variables.allValues) {
-        if (![variable.currentValue isEqualToString:variable.defaultValue]) {
-            config[variable.name] = @{
-                @"value": variable.currentValue,
-                @"state": @(variable.state),
-                @"category": @(variable.category)
-            };
-        }
-    }
-    
-    NSString *configPath = [self configurationPath];
-    [config writeToFile:configPath atomically:YES];
-}
-
-#pragma mark - Dependencies
-
-- (BOOL)checkDependencies:(NSString *)variableName {
-    TSEnvironmentVariable *variable = [self variableForName:variableName];
-    if (!variable) return NO;
-    
-    for (NSString *depName in variable.dependencies) {
-        TSEnvironmentVariable *dep = [self variableForName:depName];
-        if (!dep || dep.state != TSVariableStateActive) return NO;
-    }
-    
-    return YES;
-}
-
-#pragma mark - Dynamic Variables
-
-- (void)updateDynamicVariables {
-    for (TSEnvironmentVariable *variable in self.variables.allValues) {
-        if (variable.isDynamic) {
-            // Update dynamic variables based on their behavior
-            [self updateDynamicVariable:variable];
+- (void)updateSecurityState {
+    // Update variables based on security level
+    for (TSEnvironmentVariable *var in self.variables.allValues) {
+        if (var.requiredSecurityLevel > self.securityLevel) {
+            var.state = TSVariableStateInactive;
         }
     }
 }
 
-- (void)updateDynamicVariable:(TSEnvironmentVariable *)variable {
-    if (!variable.isDynamic) return;
-    
-    // Example dynamic update based on system state
-    if ([variable.name isEqualToString:@"TROLLSTORE_POWER_MODE"]) {
-        // Update based on battery level
-        float batteryLevel = [UIDevice currentDevice].batteryLevel;
-        if (batteryLevel < 0.2) {
-            variable.currentValue = @"power_save";
-        } else {
-            variable.currentValue = @"performance";
-        }
-    }
+#pragma mark - Certificate Management
+
+- (void)generateCAcertificate {
+    // Implementation for iOS 17 certificate generation
+}
+
+- (void)installCAcertificate {
+    // Implementation for iOS 17 certificate installation
+}
+
+#pragma mark - Entitlement Management
+
+- (void)injectEntitlements:(NSDictionary *)entitlements {
+    // Implementation for iOS 17 entitlement injection
+}
+
+#pragma mark - Sandbox Control
+
+- (void)modifyContainerIsolation:(BOOL)enabled {
+    // Implementation for iOS 17 container isolation
+}
+
+#pragma mark - Performance Optimization
+
+- (void)optimizeMemory {
+    // Implementation for iOS 17 memory optimization
+}
+
+- (void)optimizeProcesses {
+    // Implementation for iOS 17 process optimization
 }
 
 #pragma mark - Monitoring
@@ -271,19 +306,7 @@
 - (void)monitoringTick {
     [self updateDynamicVariables];
     [self validateConfiguration];
-}
-
-#pragma mark - Security
-
-- (BOOL)isSecureVariable:(NSString *)name {
-    TSEnvironmentVariable *variable = [self variableForName:name];
-    return variable && variable.category == TSEnvironmentCategorySecurity;
-}
-
-- (void)lockSecureVariables {
-    for (TSEnvironmentVariable *variable in [self variablesInCategory:TSEnvironmentCategorySecurity]) {
-        variable.state = TSVariableStateInactive;
-    }
+    [self checkSystemCompatibility];
 }
 
 @end

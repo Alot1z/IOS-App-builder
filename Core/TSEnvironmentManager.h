@@ -1,4 +1,9 @@
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
+
+// iOS Version support
+#define TROLLSTORE_MIN_IOS_VERSION 14.0
+#define TROLLSTORE_MAX_IOS_VERSION 17.0
 
 typedef NS_ENUM(NSInteger, TSEnvironmentCategory) {
     TSEnvironmentCategoryPublic,
@@ -18,6 +23,30 @@ typedef NS_ENUM(NSInteger, TSVariableState) {
     TSVariableStateUpdating
 };
 
+typedef NS_ENUM(NSInteger, TSSecurityLevel) {
+    TSSecurityLevelNone = 0,
+    TSSecurityLevelBasic = 1,
+    TSSecurityLevelEnhanced = 2,
+    TSSecurityLevelMaximum = 3
+};
+
+typedef NS_ENUM(NSInteger, TSArchitecture) {
+    TSArchitectureUnknown,
+    TSArchitectureArm64,
+    TSArchitectureArm64e
+};
+
+@interface TSSystemInfo : NSObject
+
++ (TSArchitecture)currentArchitecture;
++ (float)systemVersion;
++ (BOOL)isSupported;
++ (NSString *)deviceModel;
++ (uint64_t)availableMemory;
++ (uint64_t)availableStorage;
+
+@end
+
 @interface TSEnvironmentVariable : NSObject
 
 @property (nonatomic, strong) NSString *name;
@@ -34,6 +63,10 @@ typedef NS_ENUM(NSInteger, TSVariableState) {
 @property (nonatomic, strong) NSArray<NSString *> *conflicts;
 @property (nonatomic, assign) BOOL isDynamic;
 @property (nonatomic, strong) NSDictionary *dynamicBehavior;
+@property (nonatomic, assign) TSSecurityLevel requiredSecurityLevel;
+@property (nonatomic, assign) BOOL requiresRestart;
+@property (nonatomic, strong) NSArray<NSString *> *supportedArchitectures;
+@property (nonatomic, strong) NSArray<NSNumber *> *supportedVersions;
 
 - (instancetype)initWithName:(NSString *)name
                 description:(NSString *)description
@@ -44,12 +77,18 @@ typedef NS_ENUM(NSInteger, TSVariableState) {
 - (BOOL)validateValue:(NSString *)value;
 - (BOOL)canTransitionToState:(TSVariableState)newState;
 - (NSArray<NSString *> *)requiredRestarts;
+- (BOOL)isSupported;
+- (BOOL)requiresSecurityBypass;
 
 @end
 
 @interface TSEnvironmentManager : NSObject
 
 + (instancetype)sharedManager;
+
+// System Information
+- (TSSystemInfo *)systemInfo;
+- (BOOL)checkSystemCompatibility;
 
 // Category Management
 - (NSArray<TSEnvironmentVariable *> *)variablesInCategory:(TSEnvironmentCategory)category;
@@ -103,6 +142,29 @@ typedef NS_ENUM(NSInteger, TSVariableState) {
 - (BOOL)isSecureVariable:(NSString *)name;
 - (void)lockSecureVariables;
 - (void)unlockSecureVariables;
+- (BOOL)setSecurityLevel:(TSSecurityLevel)level;
+- (TSSecurityLevel)currentSecurityLevel;
+
+// Certificate Management
+- (void)generateCAcertificate;
+- (void)installCAcertificate;
+- (void)removeCACertificate;
+- (BOOL)validateSignature:(NSString *)path;
+
+// Entitlement Management
+- (void)injectEntitlements:(NSDictionary *)entitlements;
+- (void)removeEntitlements:(NSArray<NSString *> *)entitlementIds;
+- (NSDictionary *)currentEntitlements;
+
+// Sandbox Control
+- (void)modifyContainerIsolation:(BOOL)enabled;
+- (void)enhanceIPC:(BOOL)enabled;
+- (void)modifyFileSystemAccess:(NSDictionary *)permissions;
+
+// Performance
+- (void)optimizeMemory;
+- (void)optimizeProcesses;
+- (NSDictionary *)performanceMetrics;
 
 // Monitoring
 - (void)startMonitoring;
