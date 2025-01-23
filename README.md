@@ -35,7 +35,7 @@ For better organization and clarity, installation instructions are split into se
 
 This enhanced version of TrollStore includes:
 
-- `TrollStore/` - Original TrollStore (as git submodule)
+- `TrollStore/` - Original TrollStore
 - `bins/` - Enhanced build tools and utilities
 - `extensions/` - Additional features and improvements
 - Separate installation guides for different scenarios
