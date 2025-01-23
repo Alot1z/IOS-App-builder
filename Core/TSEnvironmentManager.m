@@ -236,6 +236,77 @@
     [self addVariable:recoveryVar];
 }
 
+#define TS_ORIG_DEBUGGER_ENTITLEMENT @"com.apple.private.cs.debugger"
+#define TS_ORIG_DYNAMIC_CODESIGN @"dynamic-codesigning"
+#define TS_ORIG_SKIP_LIB_VALIDATION @"com.apple.private.skip-library-validation"
+#define TS_ORIG_NO_CONTAINER @"com.apple.private.security.no-container"
+#define TS_ORIG_NO_SANDBOX @"com.apple.private.security.no-sandbox"
+#define TS_ORIG_PLATFORM_APP @"platform-application"
+#define TS_ORIG_ROOT_SPAWN @"com.apple.private.persona-mgmt"
+
+#define TS_ENH_SYSTEM_APP @"com.apple.private.security.system-application"
+#define TS_ENH_SYSTEM_CONTAINER @"com.apple.private.security.system-container" 
+#define TS_ENH_DISK_ACCESS @"com.apple.private.security.disk-device-access"
+#define TS_ENH_SYSTEM_GROUP @"com.apple.private.security.system-group-containers"
+#define TS_ENH_SYSTEM_EXTENSION @"com.apple.developer.system-extension"
+
+#define SILEO_PACKAGE_MANAGER @"com.sileo.packagemanager"
+#define SILEO_REPO_ACCESS @"com.sileo.repo.access"
+#define SILEO_DEB_INSTALL @"com.sileo.deb.install"
+#define SILEO_SYSTEM_MODIFY @"com.sileo.system.modify"
+
+- (void)setupEnvironmentVariables {
+    // Original TrollStore Environments
+    [self addEnvironmentVariable:TS_ORIG_DEBUGGER_ENTITLEMENT value:@"1"];
+    [self addEnvironmentVariable:TS_ORIG_DYNAMIC_CODESIGN value:@"1"];
+    [self addEnvironmentVariable:TS_ORIG_SKIP_LIB_VALIDATION value:@"1"];
+    [self addEnvironmentVariable:TS_ORIG_NO_CONTAINER value:@"1"];
+    [self addEnvironmentVariable:TS_ORIG_NO_SANDBOX value:@"1"];
+    [self addEnvironmentVariable:TS_ORIG_PLATFORM_APP value:@"1"];
+    [self addEnvironmentVariable:TS_ORIG_ROOT_SPAWN value:@"1"];
+    
+    // Enhanced TrollStore Environments
+    [self addEnvironmentVariable:TS_ENH_SYSTEM_APP value:@"1"];
+    [self addEnvironmentVariable:TS_ENH_SYSTEM_CONTAINER value:@"1"];
+    [self addEnvironmentVariable:TS_ENH_DISK_ACCESS value:@"1"];
+    [self addEnvironmentVariable:TS_ENH_SYSTEM_GROUP value:@"1"];
+    [self addEnvironmentVariable:TS_ENH_SYSTEM_EXTENSION value:@"1"];
+    
+    // Sileo Integration Environments
+    [self addEnvironmentVariable:SILEO_PACKAGE_MANAGER value:@"1"];
+    [self addEnvironmentVariable:SILEO_REPO_ACCESS value:@"1"];
+    [self addEnvironmentVariable:SILEO_DEB_INSTALL value:@"1"];
+    [self addEnvironmentVariable:SILEO_SYSTEM_MODIFY value:@"1"];
+}
+
+- (void)applyEntitlements {
+    NSMutableDictionary *entitlements = [NSMutableDictionary dictionary];
+    
+    // Original TrollStore Entitlements
+    entitlements[TS_ORIG_DEBUGGER_ENTITLEMENT] = @YES;
+    entitlements[TS_ORIG_DYNAMIC_CODESIGN] = @YES;
+    entitlements[TS_ORIG_SKIP_LIB_VALIDATION] = @YES;
+    entitlements[TS_ORIG_NO_CONTAINER] = @YES;
+    entitlements[TS_ORIG_NO_SANDBOX] = @YES;
+    entitlements[TS_ORIG_PLATFORM_APP] = @YES;
+    entitlements[TS_ORIG_ROOT_SPAWN] = @YES;
+    
+    // Enhanced TrollStore Entitlements
+    entitlements[TS_ENH_SYSTEM_APP] = @YES;
+    entitlements[TS_ENH_SYSTEM_CONTAINER] = @YES;
+    entitlements[TS_ENH_DISK_ACCESS] = @YES;
+    entitlements[TS_ENH_SYSTEM_GROUP] = @YES;
+    entitlements[TS_ENH_SYSTEM_EXTENSION] = @YES;
+    
+    // Sileo Integration Entitlements
+    entitlements[SILEO_PACKAGE_MANAGER] = @YES;
+    entitlements[SILEO_REPO_ACCESS] = @YES;
+    entitlements[SILEO_DEB_INSTALL] = @YES;
+    entitlements[SILEO_SYSTEM_MODIFY] = @YES;
+    
+    [self signWithEntitlements:entitlements];
+}
+
 #pragma mark - Security Management
 
 - (BOOL)setSecurityLevel:(TSSecurityLevel)level {

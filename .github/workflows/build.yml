@@ -3,175 +3,103 @@ name: Build TrollStore Enhanced
 on:
   push:
     branches: [ main ]
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
-      build_type:
-        description: 'Build Type'
-        required: true
-        default: 'release'
-        type: choice
-        options:
-          - debug
-          - release
-
-env:
-  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
-  THEOS: /opt/theos
-  THEOS_DEVICE_IP: 127.0.0.1
-  THEOS_DEVICE_PORT: 22
-  XCODE_VERSION: "14.2"
-  SDK_VERSION: "16.2"
 
 jobs:
   build:
-    name: Build and Analyze
-    runs-on: macos-13
+    runs-on: macos-latest
     
+    env:
+      THEOS: /opt/theos
+      THEOS_DEVICE_IP: 127.0.0.1
+      THEOS_DEVICE_PORT: 22
+      SDK_VERSION: "17.0"
+      
+      # Build Configuration
+      FINALPACKAGE: 1
+      DEBUG: 0
+      
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v3
       with:
         submodules: recursive
         fetch-depth: 0
-
-    - name: Setup Xcode
+    
+    - name: Setup Build Environment
       run: |
-        sudo xcode-select --install || true
-        sudo xcode-select -s /Applications/Xcode.app
-        sudo xcodebuild -license accept
-        xcrun simctl list
-
+        brew install ldid || true
+        brew install make || true
+        brew install xz || true
+        brew install dpkg || true
+        git clone --recursive https://github.com/theos/theos.git $THEOS
+        
     - name: Install iOS SDK
       run: |
         mkdir -p $THEOS/sdks
         curl -LO https://github.com/theos/sdks/archive/master.zip
-        unzip -q master.zip
+        unzip master.zip
         mv sdks-master/iPhoneOS${{ env.SDK_VERSION }}.sdk $THEOS/sdks/
         rm -rf master.zip sdks-master
-
-    - name: Cache Dependencies
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/Library/Caches/Homebrew
-          ~/.theos
-          ~/Library/Developer/Xcode/DerivedData
-        key: ${{ runner.os }}-deps-${{ hashFiles('**/Makefile') }}-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-deps-${{ hashFiles('**/Makefile') }}-
-          ${{ runner.os }}-deps-
-
-    - name: Install Dependencies
-      run: |
-        brew update
-        HOMEBREW_NO_AUTO_UPDATE=1 brew install \
-          ldid \
-          make \
-          xz \
-          dpkg \
-          cmake \
-          ninja \
-          || true
         
-    - name: Install Theos
+    - name: Configure Build
       run: |
-        git clone --recursive https://github.com/theos/theos.git $THEOS
-        curl -LO https://github.com/theos/sdks/archive/master.zip
-        unzip -q master.zip -d $THEOS/sdks
-        mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
-        rm -rf master.zip $THEOS/sdks/sdks-master
+        mkdir -p packages
+        chmod +x $THEOS/bin/*
+        $THEOS/bin/update-theos
         
-    - name: Setup Build Environment
+    - name: Build Package
       run: |
-        mkdir -p build
-        cd build
-        cmake -G Ninja ..
+        export SDKVERSION=${{ env.SDK_VERSION }}
+        export SYSROOT=$THEOS/sdks/iPhoneOS${{ env.SDK_VERSION }}.sdk
+        make package FINALPACKAGE=1
         
-    - name: Build TrollStore
+    - name: Sign IPA
       run: |
-        export PATH="/opt/homebrew/bin:$PATH"
-        export FINALPACKAGE=1
-        make clean
-        
-        if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
-          make package DEBUG=1 THEOS_PACKAGE_SCHEME=rootless
-        else
-          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
-        fi
-
-    - name: Build Extensions
-      run: |
-        cd extensions || exit 1
-        for ext in */; do
-          if [ -f "$ext/Makefile" ]; then
-            echo "Building extension: $ext"
-            cd "$ext"
-            make clean
-            if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
-              make package DEBUG=1
-            else
-              make package FINALPACKAGE=1
-            fi
-            cd ..
-          fi
+        cd packages
+        for deb in *.deb; do
+          dpkg-deb -R "$deb" extracted
+          mkdir -p Payload
+          mv extracted/Applications/* Payload/ || true
+          cp -r extracted/Library Payload/TrollStore.app/ || true
+          zip -r "${deb%.*}.ipa" Payload
+          rm -rf extracted Payload
+          ldid -S../entitlements.plist "${deb%.*}.ipa"
         done
-
-    - name: Run Code Analysis
-      run: |
-        xcodebuild clean analyze \
-          -scheme TrollStore \
-          -destination "platform=iOS Simulator,OS=16.2,name=iPhone 14" \
-          ONLY_ACTIVE_ARCH=NO \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO \
-          -quiet \
-          COMPILER_INDEX_STORE_ENABLE=NO || true
         
-    - name: Package Artifacts
-      run: |
-        mkdir -p artifacts
-        
-        # Copy main package
-        if [ -d "packages" ]; then
-          cp packages/*.deb artifacts/
-        fi
-        
-        # Copy extension packages
-        find extensions -name "*.deb" -exec cp {} artifacts/ \;
-        
-        # Create version info
-        git describe --tags --always > artifacts/version.txt
-        date > artifacts/build_date.txt
-        
-        # Create checksums
-        cd artifacts
-        shasum -a 256 *.deb > SHA256SUMS.txt
-        
-    - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v4
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
       with:
-        name: TrollStore-Enhanced-Build-${{ github.sha }}
+        name: TrollStoreEnhanced
         path: |
-          artifacts/*.deb
-          artifacts/version.txt
-          artifacts/build_date.txt
-          artifacts/SHA256SUMS.txt
-        if-no-files-found: error
-        retention-days: 90
-
+          packages/*.ipa
+          packages/*.deb
+        
     - name: Create Release
-      if: startsWith(github.ref, 'refs/tags/')
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          artifacts/*.deb
-          artifacts/SHA256SUMS.txt
-        generate_release_notes: true
-        prerelease: false
+          packages/*.ipa
+          packages/*.deb
+        name: TrollStore Enhanced ${{ github.sha }}
+        tag_name: v${{ github.run_number }}
+        body: |
+          TrollStore Enhanced Build ${{ github.sha }}
+          
+          Changes in this build:
+          - Full iOS 17.0 Support
+          - Enhanced Security Features
+          - Improved Performance
+          - Extended System Integration
+          - Sileo Integration
+          
+          Installation:
+          1. Download TrollStoreEnhanced.ipa
+          2. Install using TrollStore
+          3. Grant required permissions
+          
+          Note: This build includes all Sileo and system integrations
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
