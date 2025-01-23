@@ -1,4 +1,4 @@
-name: Build TrollStore Enhanced
+name: Build TrollStore
 
 on:
   push:
@@ -6,82 +6,32 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
-      build_mode:
-        description: 'Build Mode'
-        required: true
-        type: choice
-        options:
-          - release
-          - debug
-        default: 'release'
-
-env:
-  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
-  THEOS: ${{ github.workspace }}/theos
-  PREFIX: ${{ github.workspace }}/out
 
 jobs:
   build:
-    name: Build TrollStore Enhanced
     runs-on: macos-latest
     
     env:
+      THEOS: ${{ github.workspace }}/theos
       THEOS_DEVICE_IP: 127.0.0.1
       THEOS_DEVICE_PORT: 22
-      SDK_VERSION: '17.0'
-      BUILD_TYPE: ${{ github.event.inputs.build_mode || 'release' }}
+      SDK_VERSION: "17.0"
       
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
       with:
         submodules: recursive
         fetch-depth: 0
-
-    - name: Cache Theos
-      uses: actions/cache@v4
-      id: cache-theos
-      with:
-        path: ${{ env.THEOS }}
-        key: macOS-theos-${{ hashFiles('**/*.m', '**/*.h', '**/*.x', '**/Makefile', '**/control') }}
-        restore-keys: |
-          macOS-theos-
-
-    - name: Cache SDKs
-      uses: actions/cache@v4
-      id: cache-sdks
-      with:
-        path: ${{ env.THEOS }}/sdks
-        key: macOS-sdks-${{ hashFiles('**/*.m', '**/*.h', '**/*.x', '**/Makefile', '**/control') }}
-        restore-keys: |
-          macOS-sdks-
-
-    - name: Setup Build Environment
+    
+    - name: Install Dependencies
       run: |
-        echo "Setting up build environment..."
+        brew install ldid make xz dpkg || true
+        brew install wget cmake ninja || true
         sudo xcode-select --switch /Applications/Xcode.app
-        brew install ldid dpkg xz || true
-        brew install cmake ninja || true
-        brew install wget curl || true
-        
-    - name: Install LLVM Toolchain
-      run: |
-        echo "Installing LLVM toolchain..."
-        brew install llvm || true
-        echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
         
     - name: Setup Theos
-      if: steps.cache-theos.outputs.cache-hit != 'true'
       run: |
-        echo "Setting up Theos..."
         git clone --recursive https://github.com/theos/theos.git $THEOS
-        
-    - name: Setup SDKs
-      if: steps.cache-sdks.outputs.cache-hit != 'true'
-      run: |
-        echo "Setting up SDKs..."
-        mkdir -p $THEOS/sdks
         curl -LO https://github.com/theos/sdks/archive/master.zip
         unzip master.zip -d $THEOS/sdks
         mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
@@ -89,105 +39,48 @@ jobs:
         
     - name: Build insert_dylib
       run: |
-        echo "Building insert_dylib..."
         git clone https://github.com/pwn20wndstuff/insert_dylib
         cd insert_dylib
-        xcodebuild -configuration Release
+        xcodebuild
         sudo cp build/Release/insert_dylib /usr/local/bin/
         cd ..
         rm -rf insert_dylib
         
-    - name: Build TrollStore Core
+    - name: Build TrollStore
       run: |
-        echo "Building TrollStore core..."
-        make clean
-        if [ "${{ env.BUILD_TYPE }}" = "debug" ]; then
-          make package DEBUG=1
-        else
-          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
-        fi
+        chmod +x bins/build_enhanced.sh
+        ./bins/build_enhanced.sh
         
-    - name: Process Binaries
+    - name: Create IPA
       run: |
-        echo "Processing binaries..."
         cd packages
         for deb in *.deb; do
-          echo "Processing $deb..."
           dpkg-deb -R "$deb" extracted
-          
-          # Setup payload structure
-          mkdir -p Payload/TrollStore.app
-          
-          # Copy application files
+          mkdir -p Payload
           cp -r extracted/Applications/* Payload/ || true
           cp -r extracted/Library Payload/TrollStore.app/ || true
-          
-          # Insert dylib
-          if [ -f "Payload/TrollStore.app/TrollStore" ]; then
-            echo "Inserting dylib..."
-            insert_dylib --all-yes "@executable_path/TrollStore" Payload/TrollStore.app/TrollStore
-          fi
-          
-          # Create and sign IPA
-          echo "Creating IPA..."
+          insert_dylib --all-yes "@executable_path/TrollStore" Payload/TrollStore.app/TrollStore
           zip -r "${deb%.*}.ipa" Payload
-          echo "Signing IPA..."
           ldid -S../entitlements.plist "${deb%.*}.ipa"
-          
-          # Cleanup
           rm -rf extracted Payload
         done
         
-    - name: Verify Build
-      run: |
-        echo "Verifying build artifacts..."
-        ls -la packages/
-        file packages/*.ipa
-        file packages/*.deb
-        
-    - name: Upload Build Artifacts
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: TrollStoreEnhanced-${{ env.BUILD_TYPE }}
+        name: TrollStoreEnhanced
         path: |
           packages/*.ipa
           packages/*.deb
-        if-no-files-found: error
         
-    - name: Create GitHub Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v2
       with:
         files: |
           packages/*.ipa
           packages/*.deb
-        name: TrollStore Enhanced ${{ github.run_number }}
+        name: TrollStore Enhanced ${{ github.sha }}
         tag_name: v${{ github.run_number }}
-        body: |
-          TrollStore Enhanced Build ${{ github.run_number }}
-          
-          Build Type: ${{ env.BUILD_TYPE }}
-          iOS Target: ${{ env.SDK_VERSION }}
-          
-          Changes in this build:
-          - Full iOS 17.0 Support
-          - Enhanced Security Features
-          - Improved Performance
-          - Extended System Integration
-          - Advanced Entitlements
-          
-          Installation:
-          1. Download TrollStoreEnhanced.ipa
-          2. Install using TrollStore
-          3. Grant required permissions
-          
-          Note: This build includes all system integrations and advanced features
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Cleanup
-      if: always()
-      run: |
-        echo "Cleaning up..."
-        rm -rf packages
-        rm -rf build
