@@ -1,0 +1,72 @@
+name: Build TrollStore Enhanced
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and Analyze
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode.app
+
+    - name: Install Dependencies
+      run: |
+        brew install ldid
+        brew install make
+        brew install theos
+        
+    - name: Setup Build Environment
+      run: |
+        mkdir -p $THEOS/sdks
+        curl -LO https://github.com/theos/sdks/archive/refs/heads/master.zip
+        unzip master.zip -d $THEOS/sdks
+        mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
+        rm -rf master.zip $THEOS/sdks/sdks-master
+
+    - name: Build TrollStore
+      run: |
+        make package FINALPACKAGE=1
+        
+    - name: Build Extensions
+      run: |
+        cd extensions
+        for ext in */; do
+          if [ -f "$ext/Makefile" ]; then
+            cd "$ext"
+            make package FINALPACKAGE=1
+            cd ..
+          fi
+        done
+
+    - name: Run Analysis
+      run: |
+        xcodebuild clean analyze \
+          -scheme TrollStore \
+          -destination "platform=iOS Simulator,OS=latest,name=iPhone 14" \
+          ONLY_ACTIVE_ARCH=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+
+    - name: Package Artifacts
+      run: |
+        mkdir -p artifacts
+        cp packages/*.deb artifacts/
+        cp extensions/*/packages/*.deb artifacts/ 2>/dev/null || true
+        
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: TrollStore-Enhanced-Build
+        path: artifacts/*.deb
+        if-no-files-found: error
