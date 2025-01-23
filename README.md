@@ -525,208 +525,6 @@ cd TrollStore_Enhanced
 ## How New Features Are Integrated
 
 ### 1. Build Integration
-When you build TrollStore Enhanced, the following components are added:
-
-```plaintext
-TrollStore.app/
-├── Interface
-│   ├── MainViewController      # Enhanced app list
-│   ├── EnvironmentVC          # Environment editor
-│   └── AdvancedVC             # New controls
-├── Core
-│   ├── TSEnhancedManager      # Core functionality
-│   ├── TSEnvironmentManager   # Environment handling
-│   └── TSProcessManager       # Process control
-└── Resources
-    └── Presets/              # Default configurations
-```
-
-### 2. Feature Integration
-- **Main App Interface**
-  - Enhanced features are automatically integrated into UI
-  - New buttons and controls appear in relevant sections
-  - All new features accessible through standard navigation
-
-- **Background Services**
-  - New daemons run for advanced features
-  - Automatic integration with iOS
-  - Enhanced persistence handling
-
-### 3. Using New Features
-
-#### Environment Modification
-1. Open TrollStore
-2. Tap any installed app
-3. Select "Edit Environment"
-4. Make changes
-5. Tap "Save"
-6. **Important**: Tap "Reinstall" when prompted
-   - This step is crucial for applying changes
-   - App will reregister with new settings
-
-#### Advanced Installation
-1. Tap "+" on main screen
-2. Choose installation source
-3. Select advanced options:
-   - Set environment variables
-   - Configure entitlements
-   - Choose persistence options
-4. Tap "Install"
-
-#### Process Management
-1. Go to Settings > Advanced
-2. Select "Process Manager"
-3. View and control running apps
-4. Use quick actions for common tasks
-
-## Environment Variables Guide
-
-### Public Environment Variables
-These variables are safe to modify and commonly used:
-
-| Variable | Description | Default | Toggle |
-|----------|-------------|---------|--------|
-| `TROLLSTORE_PERSIST` | Keep app installed after reboot | 0 | ✓ |
-| `TROLLSTORE_ENTITLEMENTS` | Enable all entitlements | 0 | ✓ |
-| `TROLLSTORE_LOG_LEVEL` | Logging detail (0-4) | 1 | - |
-| `TROLLSTORE_CONTAINER` | Custom container path | Default | - |
-| `TROLLSTORE_BACKUP` | Enable automatic backups | 0 | ✓ |
-| `TROLLSTORE_UPDATE_CHECK` | Auto-check for updates | 1 | ✓ |
-| `TROLLSTORE_CACHE_DIR` | Custom cache directory | Default | - |
-| `TROLLSTORE_TEMP_DIR` | Temporary file location | Default | - |
-| `TROLLSTORE_NO_SANDBOX` | Disable app sandboxing | 0 | ✓ |
-| `TROLLSTORE_DEBUG` | Enable debug logging | 0 | ✓ |
-
-### Private/System Environment Variables 
-These variables affect core functionality - modify with caution:
-
-| Variable | Description | Default | Toggle |
-|----------|-------------|---------|--------|
-| `DYLD_INSERT_LIBRARIES` | Load custom dylibs | Empty | ✓ |
-| `TROLLSTORE_ROOT_PATH` | TrollStore installation path | System | - |
-| `TROLLSTORE_APP_DATA` | App data storage location | System | - |
-| `TROLLSTORE_ORIG_PATH` | Original binary path | System | - |
-| `TROLLSTORE_HOOKS` | Custom hook libraries | Empty | ✓ |
-| `TROLLSTORE_DAEMON` | Daemon configuration | Default | - |
-| `TROLLSTORE_SIGNATURES` | Signature verification | 1 | ✓ |
-| `TROLLSTORE_ENTITLEMENTS_ALL` | Grant all entitlements | 0 | ✓ |
-| `TROLLSTORE_SYSTEM_VERSION` | Target iOS version | Auto | - |
-| `TROLLSTORE_DEVICE_TYPE` | Target device type | Auto | - |
-
-### Using Environment Variables
-
-#### In TrollStore UI
-1. Select an app from the list
-2. Tap "Edit Environment"
-3. You'll see two sections:
-   - Public Variables (Safe to modify)
-   - Private Variables (Use with caution)
-4. Each variable has:
-   - Toggle switch (if applicable)
-   - Information button (ⓘ) showing:
-     * Full description
-     * Default value
-     * Usage examples
-     * Warning if dangerous
-   - Value field (for non-toggle variables)
-
-#### Variable States
-- 🟢 Active & Working
-- 🟡 Active but Needs Restart
-- 🔴 Inactive
-- ⚠️ Warning/Caution Needed
-
-#### Common Configurations
-
-1. **Maximum Freedom**
-```
-TROLLSTORE_PERSIST=1
-TROLLSTORE_ENTITLEMENTS=1
-TROLLSTORE_NO_SANDBOX=1
-```
-
-2. **Maximum Security**
-```
-TROLLSTORE_SIGNATURES=1
-TROLLSTORE_NO_SANDBOX=0
-TROLLSTORE_ENTITLEMENTS=0
-```
-
-3. **Developer Mode**
-```
-TROLLSTORE_DEBUG=1
-TROLLSTORE_LOG_LEVEL=4
-TROLLSTORE_PERSIST=1
-```
-
-#### Saving Changes
-1. After modifying variables, tap "Save"
-2. A popup will show affected components
-3. Tap "Reinstall" to apply changes
-4. Wait for app reregistration
-
-#### Backup & Restore
-- Export: Tap "Export Config" to save current environment
-- Import: Tap "Import Config" to load saved environment
-- Presets: Choose from common configurations
-
-### Variable Details
-
-Each variable can be clicked to show a detailed card:
-
-```
-VARIABLE_NAME
-├── Description: Detailed explanation
-├── Type: Toggle/Text/Number
-├── Default: Default value
-├── Effects:
-│   ├── Components affected
-│   └── Required restarts
-├── Examples:
-│   ├── Common usage
-│   └── Use cases
-└── Warnings:
-    └── Potential risks
-```
-
-### Advanced Usage
-
-#### Combining Variables
-Some variables work together for enhanced functionality:
-
-1. **Enhanced Persistence**
-```
-TROLLSTORE_PERSIST=1
-TROLLSTORE_BACKUP=1
-```
-
-2. **Full Development**
-```
-TROLLSTORE_DEBUG=1
-TROLLSTORE_NO_SANDBOX=1
-TROLLSTORE_ENTITLEMENTS=1
-```
-
-#### Troubleshooting
-
-If an app won't launch after environment changes:
-
-1. Check Logs:
-```
-TROLLSTORE_DEBUG=1
-TROLLSTORE_LOG_LEVEL=4
-```
-
-2. Reset to Default:
-- Tap "Reset All" in Environment Editor
-- Reinstall app
-
-3. Common Issues:
-- 🔴 App crashes: Check TROLLSTORE_ENTITLEMENTS
-- 🔴 No persistence: Verify TROLLSTORE_PERSIST
-- 🔴 Permission denied: Check TROLLSTORE_NO_SANDBOX
-
-## Build Output Integration
 When building TrollStore Enhanced, new features are compiled and integrated:
 
 1. **Core Integration**
@@ -750,6 +548,188 @@ make package
 - All components are packaged into main .deb
 - Features automatically integrate on installation
 - No manual setup required
+
+## Complete Environment Variables Reference
+
+### 1. Public Variables (User-Configurable)
+Safe to modify, intended for general use:
+
+| Variable | Description | Default | Toggle |
+|----------|-------------|---------|--------|
+| `TROLLSTORE_PERSIST` | Keep app installed after reboot | 0 | ✓ |
+| `TROLLSTORE_ENTITLEMENTS` | Enable all entitlements | 0 | ✓ |
+| `TROLLSTORE_LOG_LEVEL` | Logging detail (0-4) | 1 | - |
+| `TROLLSTORE_CONTAINER` | Custom container path | Default | - |
+| `TROLLSTORE_BACKUP` | Enable automatic backups | 0 | ✓ |
+| `TROLLSTORE_UPDATE_CHECK` | Auto-check for updates | 1 | ✓ |
+| `TROLLSTORE_CACHE_DIR` | Custom cache directory | Default | - |
+| `TROLLSTORE_TEMP_DIR` | Temporary file location | Default | - |
+| `TROLLSTORE_NO_SANDBOX` | Disable app sandboxing | 0 | ✓ |
+| `TROLLSTORE_DEBUG` | Enable debug logging | 0 | ✓ |
+
+### 2. Private/System Variables
+Core system variables - modify with caution:
+
+| Variable | Description | Default | Toggle |
+|----------|-------------|---------|--------|
+| `DYLD_INSERT_LIBRARIES` | Load custom dylibs | Empty | ✓ |
+| `TROLLSTORE_ROOT_PATH` | TrollStore installation path | System | - |
+| `TROLLSTORE_APP_DATA` | App data storage location | System | - |
+| `TROLLSTORE_ORIG_PATH` | Original binary path | System | - |
+| `TROLLSTORE_HOOKS` | Custom hook libraries | Empty | ✓ |
+| `TROLLSTORE_DAEMON` | Daemon configuration | Default | - |
+| `TROLLSTORE_SIGNATURES` | Signature verification | 1 | ✓ |
+| `TROLLSTORE_ENTITLEMENTS_ALL` | Grant all entitlements | 0 | ✓ |
+
+### 3. Security Variables
+Control app security and permissions:
+
+| Variable | Description | Default | Toggle |
+|----------|-------------|---------|--------|
+| `TROLLSTORE_SECURITY_LEVEL` | Security enforcement level (0-3) | 2 | - |
+| `TROLLSTORE_ALLOW_UNSIGNED` | Allow unsigned code execution | 0 | ✓ |
+| `TROLLSTORE_SANDBOX_LEVEL` | Sandbox restriction level (0-3) | 2 | - |
+| `TROLLSTORE_ENTITLEMENT_MASK` | Custom entitlement restrictions | Full | - |
+| `TROLLSTORE_SECURE_STORAGE` | Enable encrypted storage | 1 | ✓ |
+| `TROLLSTORE_KEYCHAIN_ACCESS` | Allow keychain access | 0 | ✓ |
+| `TROLLSTORE_SECURE_BOOT` | Verify boot chain | 1 | ✓ |
+| `TROLLSTORE_JIT_ALLOW` | Allow JIT compilation | 0 | ✓ |
+
+### 4. Development Variables
+For developers and debugging:
+
+| Variable | Description | Default | Toggle |
+|----------|-------------|---------|--------|
+| `TROLLSTORE_DEV_MODE` | Enable developer features | 0 | ✓ |
+| `TROLLSTORE_TRACE` | Enable function tracing | 0 | ✓ |
+| `TROLLSTORE_HEAP_LOGGING` | Log heap allocations | 0 | ✓ |
+| `TROLLSTORE_CRASH_REPORT` | Generate crash reports | 1 | ✓ |
+| `TROLLSTORE_PERF_STATS` | Collect performance stats | 0 | ✓ |
+| `TROLLSTORE_NET_DEBUG` | Network debugging | 0 | ✓ |
+| `TROLLSTORE_IPC_LOG` | Log IPC communications | 0 | ✓ |
+| `TROLLSTORE_UI_DEBUG` | Debug UI elements | 0 | ✓ |
+
+### 5. Network Variables
+Control network behavior:
+
+| Variable | Description | Default | Toggle |
+|----------|-------------|---------|--------|
+| `TROLLSTORE_PROXY_ENABLED` | Use custom proxy | 0 | ✓ |
+| `TROLLSTORE_PROXY_HOST` | Proxy server address | Empty | - |
+| `TROLLSTORE_PROXY_PORT` | Proxy server port | 0 | - |
+| `TROLLSTORE_VPN_BYPASS` | Bypass VPN restrictions | 0 | ✓ |
+| `TROLLSTORE_NET_RESTRICT` | Network restrictions | 0 | ✓ |
+| `TROLLSTORE_DNS_SERVERS` | Custom DNS servers | System | - |
+| `TROLLSTORE_NET_PRIORITY` | Network priority (0-3) | 1 | - |
+
+### 6. Performance Variables
+Optimize app performance:
+
+| Variable | Description | Default | Toggle |
+|----------|-------------|---------|--------|
+| `TROLLSTORE_CPU_LIMIT` | CPU usage limit (%) | 100 | - |
+| `TROLLSTORE_MEM_LIMIT` | Memory limit (MB) | System | - |
+| `TROLLSTORE_DISK_QUOTA` | Storage quota (MB) | Unlimited | - |
+| `TROLLSTORE_POWER_MODE` | Power optimization | Auto | ✓ |
+| `TROLLSTORE_THREAD_LIMIT` | Max thread count | Auto | - |
+| `TROLLSTORE_IO_PRIORITY` | I/O priority (0-3) | 1 | - |
+| `TROLLSTORE_GPU_FORCE` | Force GPU rendering | 0 | ✓ |
+
+### 7. Integration Variables
+System integration settings:
+
+| Variable | Description | Default | Toggle |
+|----------|-------------|---------|--------|
+| `TROLLSTORE_URL_SCHEME` | Custom URL scheme | Default | - |
+| `TROLLSTORE_SHARE_EXT` | Enable share extension | 0 | ✓ |
+| `TROLLSTORE_SIRI_ALLOW` | Allow Siri integration | 0 | ✓ |
+| `TROLLSTORE_NOTIFICATIONS` | Enable notifications | 1 | ✓ |
+| `TROLLSTORE_BACKGROUND` | Background refresh | 0 | ✓ |
+| `TROLLSTORE_LOCATION` | Location services | 0 | ✓ |
+| `TROLLSTORE_CONTACTS` | Contacts access | 0 | ✓ |
+
+### 8. Recovery Variables
+For troubleshooting and recovery:
+
+| Variable | Description | Default | Toggle |
+|----------|-------------|---------|--------|
+| `TROLLSTORE_RECOVERY_MODE` | Enable recovery mode | 0 | ✓ |
+| `TROLLSTORE_BACKUP_FREQ` | Backup frequency (hours) | 24 | - |
+| `TROLLSTORE_RESTORE_POINT` | Custom restore point | Latest | - |
+| `TROLLSTORE_SAFE_MODE` | Run in safe mode | 0 | ✓ |
+| `TROLLSTORE_AUTO_FIX` | Auto-fix common issues | 1 | ✓ |
+| `TROLLSTORE_ROLLBACK` | Allow version rollback | 0 | ✓ |
+| `TROLLSTORE_HEALTH_CHECK` | System health monitoring | 1 | ✓ |
+
+### Variable Inheritance
+
+Variables can inherit from multiple categories:
+
+```plaintext
+Base Variable
+├── Public Interface
+│   └── User Configurable
+├── Private Implementation
+│   └── System Critical
+├── Security Level
+│   ├── Basic
+│   └── Enhanced
+└── Function Type
+    ├── Feature Control
+    └── System Integration
+```
+
+### Dynamic Variables
+
+Some variables can change behavior based on context:
+
+1. **Context-Aware Variables**:
+```
+TROLLSTORE_POWER_MODE=auto    # Adjusts based on battery
+TROLLSTORE_SECURITY=adaptive  # Changes with threat level
+TROLLSTORE_PERFORMANCE=dynamic # Scales with system load
+```
+
+2. **Composite Variables**:
+```
+TROLLSTORE_PROTECTION={
+  security_level: high,
+  sandbox: enabled,
+  encryption: required
+}
+```
+
+### Variable States and Transitions
+
+Variables can have multiple states:
+
+```plaintext
+State Diagram:
+INACTIVE -> PENDING -> ACTIVE -> UPDATING
+     ^                             |
+     |_____________________________|
+```
+
+### Interaction Rules
+
+1. **Dependency Chain**:
+```
+TROLLSTORE_JIT_ALLOW=1
+  └── Requires: TROLLSTORE_SECURITY_LEVEL≤1
+      └── Requires: TROLLSTORE_DEV_MODE=1
+```
+
+2. **Mutual Exclusion**:
+```
+TROLLSTORE_SAFE_MODE=1
+  ⊕ TROLLSTORE_DEV_MODE=1    # Cannot both be active
+```
+
+3. **Complementary Variables**:
+```
+TROLLSTORE_DEBUG=1
+  + TROLLSTORE_LOG_LEVEL=4   # Better together
+```
 
 ## Credits & Version History
 - Original TrollStore by @opa334
