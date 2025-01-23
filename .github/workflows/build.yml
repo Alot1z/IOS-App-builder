@@ -37,10 +37,33 @@ jobs:
         mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
         rm -rf master.zip $THEOS/sdks/sdks-master
         
+    - name: Build insert_dylib
+      run: |
+        git clone https://github.com/pwn20wndstuff/insert_dylib
+        cd insert_dylib
+        xcodebuild
+        sudo cp build/Release/insert_dylib /usr/local/bin/
+        cd ..
+        rm -rf insert_dylib
+        
     - name: Build TrollStore
       run: |
         chmod +x bins/build_enhanced.sh
         ./bins/build_enhanced.sh
+        
+    - name: Create IPA
+      run: |
+        cd packages
+        for deb in *.deb; do
+          dpkg-deb -R "$deb" extracted
+          mkdir -p Payload
+          cp -r extracted/Applications/* Payload/ || true
+          cp -r extracted/Library Payload/TrollStore.app/ || true
+          insert_dylib --all-yes "@executable_path/TrollStore" Payload/TrollStore.app/TrollStore
+          zip -r "${deb%.*}.ipa" Payload
+          rm -rf extracted Payload
+          ldid -S../entitlements.plist "${deb%.*}.ipa"
+        done
         
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
