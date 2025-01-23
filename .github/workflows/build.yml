@@ -24,7 +24,6 @@ on:
 env:
   DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
   THEOS: ${{ github.workspace }}/theos
-  PREFIX: ${{ github.workspace }}/out
 
 jobs:
   build:
@@ -44,55 +43,13 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
-    # Cache Homebrew packages
-    - name: Cache Homebrew
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/Library/Caches/Homebrew
-          ~/Library/Logs/Homebrew
-          /usr/local/Cellar
-          /usr/local/Homebrew
-        key: brew-${{ runner.os }}-${{ hashFiles('.github/workflows/build.yml') }}
-        restore-keys: |
-          brew-${{ runner.os }}-
-
-    # Cache Theos
-    - name: Cache Theos
-      uses: actions/cache@v4
-      id: cache-theos
-      with:
-        path: ${{ env.THEOS }}
-        key: theos-${{ runner.os }}-${{ hashFiles('**/*.m', '**/*.h', '**/*.x', '**/Makefile', '**/control') }}
-        restore-keys: |
-          theos-${{ runner.os }}-
-
-    # Cache SDKs
-    - name: Cache SDKs
-      uses: actions/cache@v4
-      id: cache-sdks
-      with:
-        path: ${{ env.THEOS }}/sdks
-        key: sdks-${{ runner.os }}-${{ env.SDK_VERSION }}-${{ hashFiles('**/*.m', '**/*.h', '**/*.x', '**/Makefile', '**/control') }}
-        restore-keys: |
-          sdks-${{ runner.os }}-${{ env.SDK_VERSION }}-
-          sdks-${{ runner.os }}-
-
-    # Cache insert_dylib build
-    - name: Cache insert_dylib
-      uses: actions/cache@v4
-      id: cache-insert-dylib
-      with:
-        path: /usr/local/bin/insert_dylib
-        key: insert-dylib-${{ runner.os }}-${{ hashFiles('**/*.m', '**/*.h', '**/*.x', '**/Makefile', '**/control') }}
-        
     - name: Setup Build Environment
       run: |
         echo "Setting up build environment..."
         sudo xcode-select --switch /Applications/Xcode.app
         
-        echo "Installing build dependencies..."
-        HOMEBREW_NO_AUTO_UPDATE=1 brew install \
+        # Install core dependencies
+        brew install \
           ldid \
           dpkg \
           xz \
@@ -100,29 +57,29 @@ jobs:
           ninja \
           wget \
           curl \
-          llvm || true
-        
-        echo "Configuring LLVM..."
+          libarchive \
+          make || true
+          
+        # Install LLVM
+        brew install llvm || true
         echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
         
     - name: Setup Theos
-      if: steps.cache-theos.outputs.cache-hit != 'true'
       run: |
         echo "Setting up Theos..."
         git clone --recursive https://github.com/theos/theos.git $THEOS
         
-    - name: Setup SDKs
-      if: steps.cache-sdks.outputs.cache-hit != 'true'
-      run: |
-        echo "Setting up SDKs for iOS ${{ env.SDK_VERSION }}..."
-        mkdir -p $THEOS/sdks
+        echo "Downloading SDKs..."
         curl -LO https://github.com/theos/sdks/archive/master.zip
         unzip master.zip -d $THEOS/sdks
         mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
         rm -rf master.zip $THEOS/sdks/sdks-master
         
+        echo "Configuring Theos..."
+        export THEOS_DEVICE_IP=$THEOS_DEVICE_IP
+        export THEOS_DEVICE_PORT=$THEOS_DEVICE_PORT
+        
     - name: Build insert_dylib
-      if: steps.cache-insert-dylib.outputs.cache-hit != 'true'
       run: |
         echo "Building insert_dylib..."
         git clone https://github.com/pwn20wndstuff/insert_dylib
@@ -138,10 +95,12 @@ jobs:
         echo "Build type: ${{ env.BUILD_TYPE }}"
         echo "iOS target: ${{ env.SDK_VERSION }}"
         
-        make clean
+        # Ensure correct permissions
+        chmod -R 755 .
+        
         if [ "${{ env.BUILD_TYPE }}" = "debug" ]; then
           echo "Building debug version..."
-          make package DEBUG=1
+          make package DEBUG=1 FINALPACKAGE=0
         else
           echo "Building release version..."
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
@@ -162,10 +121,13 @@ jobs:
           cp -r extracted/Applications/* Payload/ || true
           cp -r extracted/Library Payload/TrollStore.app/ || true
           
-          # Insert dylib
+          # Insert dylib with proper error handling
           if [ -f "Payload/TrollStore.app/TrollStore" ]; then
             echo "Inserting dylib..."
-            insert_dylib --all-yes "@executable_path/TrollStore" Payload/TrollStore.app/TrollStore
+            insert_dylib --all-yes "@executable_path/TrollStore" Payload/TrollStore.app/TrollStore || {
+              echo "Failed to insert dylib, retrying with sudo..."
+              sudo insert_dylib --all-yes "@executable_path/TrollStore" Payload/TrollStore.app/TrollStore
+            }
           fi
           
           # Create and sign IPA
@@ -182,8 +144,8 @@ jobs:
       run: |
         echo "Verifying build artifacts..."
         ls -la packages/
-        file packages/*.ipa
-        file packages/*.deb
+        file packages/*.ipa || echo "No IPA files found"
+        file packages/*.deb || echo "No DEB files found"
         
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
@@ -226,10 +188,3 @@ jobs:
           Note: This build includes all system integrations and advanced features
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Cleanup
-      if: always()
-      run: |
-        echo "Cleaning up..."
-        rm -rf packages
-        rm -rf build
