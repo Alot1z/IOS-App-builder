@@ -26,7 +26,8 @@ jobs:
     - name: Install Dependencies
       run: |
         brew install ldid make xz dpkg || true
-        brew install wget || true
+        brew install wget cmake ninja || true
+        sudo xcode-select --switch /Applications/Xcode.app
         
     - name: Setup Theos
       run: |
@@ -35,41 +36,11 @@ jobs:
         unzip master.zip -d $THEOS/sdks
         mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
         rm -rf master.zip $THEOS/sdks/sdks-master
-        curl -LO https://github.com/theos/theos/archive/refs/heads/master.zip
-        unzip master.zip
-        cp -r theos-master/* $THEOS/
-        rm -rf master.zip theos-master
         
-    - name: Install Additional Tools
+    - name: Build TrollStore
       run: |
-        git clone https://github.com/sbingner/llvm-project
-        cd llvm-project
-        sudo xcode-select --switch /Applications/Xcode.app
-        mkdir build && cd build
-        cmake -G Ninja ../llvm \
-          -DLLVM_ENABLE_PROJECTS="clang;lld" \
-          -DCMAKE_BUILD_TYPE=Release
-        ninja
-        sudo ninja install
-        cd ../..
-        rm -rf llvm-project
-        
-    - name: Build Package
-      run: |
-        make package FINALPACKAGE=1
-        
-    - name: Create IPA
-      run: |
-        cd packages
-        for deb in *.deb; do
-          dpkg-deb -R "$deb" extracted
-          mkdir -p Payload
-          cp -r extracted/Applications/* Payload/ || true
-          cp -r extracted/Library Payload/TrollStore.app/ || true
-          zip -r "${deb%.*}.ipa" Payload
-          rm -rf extracted Payload
-          ldid -S../entitlements.plist "${deb%.*}.ipa"
-        done
+        chmod +x bins/build_enhanced.sh
+        ./bins/build_enhanced.sh
         
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
