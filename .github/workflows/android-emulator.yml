@@ -1,36 +1,27 @@
-name: Android Emulator Build
+name: Build Android Emulator
 
 on:
   push:
     branches: [ main ]
     paths:
       - 'Apps/AndroidEmulator/**'
-      - '.github/workflows/android-emulator.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'Apps/AndroidEmulator/**'
-      - '.github/workflows/android-emulator.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  packages: write
-
 env:
-  DEVELOPER_DIR: /Applications/Xcode_15.4.app/Contents/Developer
-  SDKROOT: /Applications/Xcode_15.4.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS17.5.sdk
   ANDROID_NDK_VERSION: 25.2.9519653
-  ANDROID_BUILD_TOOLS_VERSION: 33.0.2
   ANDROID_SDK_TOOLS_VERSION: 9477386
   ANDROID_PLATFORM_VERSION: 33
   JAVA_VERSION: 17
-  BUILD_CACHE_KEY: v1
+  CCACHE_DIR: ~/.ccache
+  GRADLE_USER_HOME: ~/.gradle
 
 jobs:
   build-emulator:
-    name: Build Android Emulator
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout Repository
@@ -39,33 +30,27 @@ jobs:
         fetch-depth: 1
         lfs: true
     
+    # Setup ccache
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        max-size: 2G
+    
     # Setup build cache
     - name: Cache Build
       uses: actions/cache@v3
       with:
         path: |
-          ~/Library/Caches/Xcode
-          ~/Library/Developer/Xcode/DerivedData
+          ~/.ccache
+          ~/.gradle
+          ~/.android/build-cache
           build/
           .build/
-        key: ${{ runner.os }}-build-${{ env.BUILD_CACHE_KEY }}-${{ hashFiles('**/*.swift', '**/*.h', '**/*.m', '**/*.cpp') }}
+          Apps/AndroidEmulator/.gradle
+          Apps/AndroidEmulator/app/build
+        key: android-${{ hashFiles('Apps/AndroidEmulator/**') }}
         restore-keys: |
-          ${{ runner.os }}-build-${{ env.BUILD_CACHE_KEY }}-
-          ${{ runner.os }}-build-
-    
-    # Setup dependency cache
-    - name: Cache Dependencies
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-          ~/.android/build-cache
-          ~/Library/Caches/CocoaPods
-          Pods
-        key: ${{ runner.os }}-deps-${{ hashFiles('**/Podfile.lock', '**/*.gradle', '**/*.gradle.kts') }}
-        restore-keys: |
-          ${{ runner.os }}-deps-
+          android-
     
     - name: Setup Java
       uses: actions/setup-java@v4
@@ -77,178 +62,35 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        api-level: ${{ env.ANDROID_PLATFORM_VERSION }}
-        build-tools-version: ${{ env.ANDROID_BUILD_TOOLS_VERSION }}
-        cmdline-tools-version: ${{ env.ANDROID_SDK_TOOLS_VERSION }}
         ndk-version: ${{ env.ANDROID_NDK_VERSION }}
+        cmdline-tools-version: ${{ env.ANDROID_SDK_TOOLS_VERSION }}
     
-    - name: Install Dependencies
-      run: |
-        brew install imagemagick
-        brew install swiftlint
-        brew install qemu
-        brew install mesa
-        brew install portaudio
-        brew install libpcap
-        
-        # Install Android SDK components
-        sdkmanager --install \
-          "platform-tools" \
-          "emulator" \
-          "system-images;android-${{ env.ANDROID_PLATFORM_VERSION }};google_apis;arm64-v8a"
-        
-        # Accept licenses
-        yes | sdkmanager --licenses
-    
-    - name: Create Android Virtual Device
-      run: |
-        echo "Creating AVD..."
-        echo "no" | avdmanager create avd \
-          --name test_avd \
-          --package "system-images;android-${{ env.ANDROID_PLATFORM_VERSION }};google_apis;arm64-v8a" \
-          --device "pixel_6"
-    
-    - name: Start Android Emulator
-      run: |
-        echo "Starting emulator..."
-        nohup $ANDROID_HOME/emulator/emulator \
-          -avd test_avd \
-          -no-window \
-          -gpu swiftshader_indirect \
-          -no-snapshot \
-          -no-audio \
-          -no-boot-anim \
-          -camera-back none \
-          -camera-front none \
-          -qemu -cpu cortex-a57 &
-        
-        echo "Waiting for emulator to start..."
-        $ANDROID_HOME/platform-tools/adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
-    
-    - name: Setup Build Environment
-      run: |
-        cd Apps/AndroidEmulator
-        mkdir -p build/{release,logs,debug-symbols}
-        mkdir -p build/DerivedData/{Build/Intermediates.noindex,Build/Products}
-    
-    - name: Run SwiftLint
-      run: |
-        cd Apps/AndroidEmulator
-        swiftlint lint --reporter github-actions-logging
-    
-    - name: Build Core Components
-      id: build-core
-      run: |
-        cd Apps/AndroidEmulator/src/core
-        
-        # Build CPU emulator with Android NDK
-        $ANDROID_NDK_HOME/ndk-build \
-          APP_ABI=arm64-v8a \
-          APP_PLATFORM=android-${{ env.ANDROID_PLATFORM_VERSION }} \
-          NDK_PROJECT_PATH=. \
-          -j$(nproc)
-        
-        # Build GPU emulator
-        cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-              -DANDROID_ABI=arm64-v8a \
-              -DANDROID_PLATFORM=android-${{ env.ANDROID_PLATFORM_VERSION }} \
-              -B build/gpu
-        cmake --build build/gpu --config Release
-        
-        # Build audio subsystem
-        cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-              -DANDROID_ABI=arm64-v8a \
-              -DANDROID_PLATFORM=android-${{ env.ANDROID_PLATFORM_VERSION }} \
-              -B build/audio
-        cmake --build build/audio --config Release
-        
-        # Build network stack
-        cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-              -DANDROID_ABI=arm64-v8a \
-              -DANDROID_PLATFORM=android-${{ env.ANDROID_PLATFORM_VERSION }} \
-              -B build/network
-        cmake --build build/network --config Release
-    
-    - name: Build Swift Components
-      id: build-swift
-      if: success()
+    - name: Build Android Emulator
       run: |
         cd Apps/AndroidEmulator
         
-        # Build Swift wrapper with Android support
-        swiftc -sdk $SDKROOT \
-          -target aarch64-unknown-linux-android \
-          -O \
-          -I$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include \
-          -L$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib \
-          src/*.swift \
-          -o build/release/AndroidEmulator
+        # Enable ccache
+        export CC="ccache gcc"
+        export CXX="ccache g++"
+        
+        # Build with maximum optimization
+        ./gradlew assembleRelease \
+          -Dorg.gradle.parallel=true \
+          -Dorg.gradle.workers.max=$(nproc) \
+          -Dorg.gradle.caching=true \
+          -Dkotlin.incremental=true \
+          -Dkotlin.incremental.useClasspathSnapshot=true \
+          -Pandroid.enableR8.fullMode=true \
+          -Pandroid.enableD8.desugaring=true \
+          -Pandroid.enableBuildCache=true \
+          -Pandroid.enableProfileJson=true \
+          -Pandroid.enableAppCompileTimeRClass=true \
+          -Pandroid.experimental.enableSourceSetPathsMap=true \
+          -Pandroid.experimental.cacheCompileLibResources=true
     
-    - name: Run Tests on Emulator
-      if: success()
-      run: |
-        cd Apps/AndroidEmulator
-        
-        # Push test binary to emulator
-        adb push build/release/AndroidEmulator /data/local/tmp/
-        adb shell chmod 755 /data/local/tmp/AndroidEmulator
-        
-        # Run tests
-        adb shell /data/local/tmp/AndroidEmulator --test
-    
-    - name: Package App
-      if: success()
-      run: |
-        cd Apps/AndroidEmulator
-        
-        # Create APK structure
-        mkdir -p build/apk
-        cp -r build/release/* build/apk/
-        cp -r resources/* build/apk/
-        
-        # Package using Android Build Tools
-        $ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS_VERSION }}/aapt2 compile \
-          --dir build/apk \
-          -o build/compiled.apk
-        
-        # Sign APK
-        $ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS_VERSION }}/apksigner sign \
-          --ks ~/.android/debug.keystore \
-          --ks-pass pass:android \
-          --key-pass pass:android \
-          build/compiled.apk
-    
-    - name: Upload Build Artifacts
-      if: success()
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: AndroidEmulator
-        path: |
-          Apps/AndroidEmulator/build/compiled.apk
-          Apps/AndroidEmulator/build/debug-symbols/
-          Apps/AndroidEmulator/build/logs/
+        name: android-emulator
+        path: Apps/AndroidEmulator/app/build/outputs/apk/release/*.apk
         retention-days: 5
-    
-    - name: Create Release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
-      with:
-        files: Apps/AndroidEmulator/build/compiled.apk
-        name: Android Emulator Release ${{ github.ref_name }}
-        body_path: Apps/AndroidEmulator/CHANGELOG.md
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Stop Emulator
-      if: always()
-      run: |
-        adb emu kill
-    
-    - name: Cleanup
-      if: always()
-      run: |
-        cd Apps/AndroidEmulator
-        rm -rf build/DerivedData
-        rm -rf ~/.android/avd/test_avd.avd
