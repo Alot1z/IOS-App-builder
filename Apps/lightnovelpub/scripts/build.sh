@@ -69,13 +69,20 @@ echo "Found Swift files: ${SWIFT_FILES[*]}"
 
 # Set compilation flags
 COMPILE_FLAGS=(
-    "-target" "arm64-apple-ios${min_ios_version}"  # Use min_ios_version for base compatibility
+    "-target" "arm64-apple-ios${min_ios_version}"
     "-sdk" "$SDKROOT"
-    "-O${optimization_level:-0}"
     "-g"
     "-swift-version" "5"
     "-module-name" "LightNovelPub"
 )
+
+# Handle optimization level
+case $optimization_level in
+    0) COMPILE_FLAGS+=("-Onone") ;;
+    1) COMPILE_FLAGS+=("-O") ;;
+    2|3) COMPILE_FLAGS+=("-O") ;;
+    *) COMPILE_FLAGS+=("-O") ;;
+esac
 
 if [ "$enable_arc" = "true" ]; then
     COMPILE_FLAGS+=("-enable-objc-arc")
@@ -97,6 +104,11 @@ FRAMEWORK_FLAGS=(
 
 # Create output directory
 mkdir -p "$BUILD_DIR/release"
+
+# Update icon generation script to use magick instead of convert
+if [ -f "scripts/generate_icons.sh" ]; then
+    sed -i 's/convert/magick/g' "scripts/generate_icons.sh"
+fi
 
 # Compile Swift files
 echo "Compiling Swift files..."

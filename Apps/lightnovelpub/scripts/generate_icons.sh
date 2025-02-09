@@ -43,7 +43,7 @@ for size in "${sizes[@]}"; do
     width=${size%x*}
     height=${size#*x}
     echo "Generating ${size} icon..."
-    convert "$input" -resize "${width}x${height}!" "$output/icon_${size}.png"
+    magick "$input" -resize "${width}x${height}!" "$output/icon_${size}.png"
 done
 
 # Create Contents.json
