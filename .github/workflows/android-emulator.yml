@@ -1,13 +1,7 @@
-name: Android Emulator Build
+name: Build Android Emulator IPA
 
 on:
   push:
-    branches: [ "master" ]
-    paths:
-      - 'Apps/AndroidEmulator/**'
-      - '.github/workflows/android-emulator.yml'
-  pull_request:
-    branches: [ "master" ]
     paths:
       - 'Apps/AndroidEmulator/**'
       - '.github/workflows/android-emulator.yml'
@@ -22,42 +16,47 @@ jobs:
   build:
     name: Build Android Emulator IPA
     runs-on: macos-latest
+    
     defaults:
       run:
         working-directory: Apps/AndroidEmulator
 
     steps:
     - uses: actions/checkout@v4
-
-    - name: Setup Xcode
+    
+    - name: Set up Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
         xcode-version: '15.2'
-
-    - name: Install Dependencies
+    
+    - name: Set up build directory
       run: |
-        brew install xcbeautify
-
-    - name: Build App
+        mkdir -p build/AndroidEmulator.xcarchive/Products/Applications
+        
+    - name: Build unsigned app
       run: |
+        cd Apps/AndroidEmulator
         xcodebuild -project AndroidEmulator.xcodeproj \
           -scheme AndroidEmulator \
           -configuration Release \
+          -archivePath ../../build/AndroidEmulator.xcarchive \
           -destination 'generic/platform=iOS' \
-          -archivePath build/AndroidEmulator.xcarchive \
-          clean archive CODE_SIGNING_ALLOWED=NO | xcbeautify
+          -sdk iphoneos \
+          archive \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
           
-    - name: Create IPA
+    - name: Package IPA
       run: |
         cd build/AndroidEmulator.xcarchive/Products/Applications
         mkdir Payload
-        cp -r *.app Payload/
+        cp -r AndroidEmulator.app Payload/
         zip -r AndroidEmulator.ipa Payload
-        mv AndroidEmulator.ipa ../../../
-          
-    - name: Upload Android Emulator IPA
-      uses: actions/upload-artifact@v4
+        rm -rf Payload
+        
+    - name: Upload IPA
+      uses: actions/upload-artifact@v3
       with:
-        name: AndroidEmulator-Unsigned
-        path: Apps/AndroidEmulator/build/AndroidEmulator.ipa
-        retention-days: 5
+        name: AndroidEmulator-unsigned
+        path: build/AndroidEmulator.xcarchive/Products/Applications/AndroidEmulator.ipa
