@@ -1,4 +1,4 @@
-name: 📱 Android Emulator Build
+name: Android Emulator Build
 
 on:
   push:
@@ -13,11 +13,12 @@ on:
 
 env:
   JAVA_VERSION: '17'
-  ANDROID_NDK_VERSION: '25.2.9519653'
+  GRADLE_VERSION: '8.5'
   ANDROID_SDK_TOOLS_VERSION: '9477386'
-  ANDROID_PLATFORM_VERSION: '33'
+  ANDROID_PLATFORM_VERSION: '34'
+  ANDROID_BUILD_TOOLS_VERSION: '34.0.0'
+  ANDROID_NDK_VERSION: '26.1.10909125'
   CCACHE_DIR: ~/.ccache
-  GRADLE_USER_HOME: ~/.gradle
 
 jobs:
   build:
@@ -36,57 +37,83 @@ jobs:
         distribution: 'temurin'
         java-version: ${{ env.JAVA_VERSION }}
         
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        cmdline-tools-version: ${{ env.ANDROID_SDK_TOOLS_VERSION }}
+        
     - name: Setup Gradle
       uses: gradle/gradle-build-action@v2
       with:
-        gradle-version: wrapper
+        gradle-version: ${{ env.GRADLE_VERSION }}
+        cache-read-only: false
+        gradle-home-cache-cleanup: true
         
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
+        max-size: 2G
         key: ${{ runner.os }}-ccache-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-ccache-
           
-    - name: Cache Gradle
+    - name: Cache Gradle and Build
       uses: actions/cache@v3
       with:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
+          ~/.android/build-cache
+          Apps/AndroidEmulator/.gradle
+          Apps/AndroidEmulator/app/build
         key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
         restore-keys: |
           ${{ runner.os }}-gradle-
           
-    - name: Build with Gradle
-      working-directory: Apps/AndroidEmulator
+    - name: Accept Android Licenses
+      run: yes | sdkmanager --licenses
+        
+    - name: Install Android Components
       run: |
-        # Enable ccache
-        export CC="ccache gcc"
-        export CXX="ccache g++"
-        export CCACHE_CPP2=yes
+        sdkmanager --install \
+          "platforms;android-${{ env.ANDROID_PLATFORM_VERSION }}" \
+          "build-tools;${{ env.ANDROID_BUILD_TOOLS_VERSION }}" \
+          "ndk;${{ env.ANDROID_NDK_VERSION }}"
+          
+    - name: Setup Build Environment
+      run: |
+        cd Apps/AndroidEmulator
+        chmod +x ./gradlew
+        # Configure ccache
+        export CCACHE_EXEC=$(which ccache)
+        export NDK_CCACHE=$CCACHE_EXEC
+        export USE_CCACHE=1
+        ccache -M 5G
+        ccache -o compression=true
+        ccache -o compression_level=9
         
-        # Give gradle more memory
-        export GRADLE_OPTS="-Xmx4g -Dorg.gradle.daemon=false"
-        
-        # Build with all optimizations
-        ./gradlew assembleRelease \
+    - name: Build with Gradle
+      run: |
+        cd Apps/AndroidEmulator
+        ./gradlew assembleDebug \
           --no-daemon \
           --parallel \
           --build-cache \
           --configure-on-demand \
           --max-workers=$(nproc) \
-          -Dkotlin.compiler.execution.strategy=in-process \
-          -Dkotlin.incremental=true \
-          -Dkotlin.incremental.useClasspathSnapshot=true \
+          -Dorg.gradle.caching=true \
+          -Dorg.gradle.parallel=true \
+          -Dorg.gradle.configureondemand=true \
+          -Dorg.gradle.jvmargs="-Xmx4g -XX:+HeapDumpOnOutOfMemoryError" \
+          -Pandroid.useAndroidX=true \
+          -Pandroid.enableJetifier=true \
           -Pandroid.enableR8.fullMode=true \
           -Pandroid.enableD8.desugaring=true \
           -Pandroid.enableBuildCache=true \
           -Pandroid.enableProfileJson=true
-        
+          
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: android-emulator
-        path: Apps/AndroidEmulator/app/build/outputs/apk/release/*.apk
-        retention-days: 5
+        name: AndroidEmulator-debug
+        path: Apps/AndroidEmulator/app/build/outputs/apk/debug/app-debug.apk
