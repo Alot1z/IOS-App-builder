@@ -27,7 +27,7 @@ jobs:
     
     - name: Set up build directory
       run: |
-        mkdir -p build/LightNovelPub.xcarchive/Products/Applications
+        mkdir -p build
         
     - name: Build unsigned app
       run: |
@@ -46,10 +46,9 @@ jobs:
     - name: Package IPA
       run: |
         cd build/LightNovelPub.xcarchive/Products/Applications
-        mkdir Payload
+        mkdir -p Payload
         cp -r LightNovelPub.app Payload/
         zip -r LightNovelPub.ipa Payload
-        rm -rf Payload
         
     - name: Upload IPA
       uses: actions/upload-artifact@v4

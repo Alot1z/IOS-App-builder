@@ -31,7 +31,7 @@ jobs:
     
     - name: Set up build directory
       run: |
-        mkdir -p build/AndroidEmulator.xcarchive/Products/Applications
+        mkdir -p build
         
     - name: Build unsigned app
       run: |
@@ -50,10 +50,9 @@ jobs:
     - name: Package IPA
       run: |
         cd build/AndroidEmulator.xcarchive/Products/Applications
-        mkdir Payload
+        mkdir -p Payload
         cp -r AndroidEmulator.app Payload/
         zip -r AndroidEmulator.ipa Payload
-        rm -rf Payload
         
     - name: Upload IPA
       uses: actions/upload-artifact@v4
