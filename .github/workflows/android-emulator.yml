@@ -12,10 +12,10 @@ on:
   workflow_dispatch:
 
 env:
-  ANDROID_NDK_VERSION: 25.2.9519653
-  ANDROID_SDK_TOOLS_VERSION: 9477386
-  ANDROID_PLATFORM_VERSION: 33
-  JAVA_VERSION: 17
+  JAVA_VERSION: '17'
+  ANDROID_NDK_VERSION: '25.2.9519653'
+  ANDROID_SDK_TOOLS_VERSION: '9477386'
+  ANDROID_PLATFORM_VERSION: '33'
   CCACHE_DIR: ~/.ccache
   GRADLE_USER_HOME: ~/.gradle
 
@@ -29,6 +29,20 @@ jobs:
       with:
         fetch-depth: 1
         lfs: true
+    
+    # Setup Java with Gradle caching
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: ${{ env.JAVA_VERSION }}
+        cache: 'gradle'
+    
+    # Setup Gradle
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v2
+      with:
+        gradle-home-cache-cleanup: true
     
     # Setup ccache
     - name: Setup ccache
@@ -52,42 +66,41 @@ jobs:
         restore-keys: |
           android-
     
-    - name: Setup Java
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: ${{ env.JAVA_VERSION }}
-        cache: 'gradle'
-    
+    # Setup Android SDK
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
         ndk-version: ${{ env.ANDROID_NDK_VERSION }}
         cmdline-tools-version: ${{ env.ANDROID_SDK_TOOLS_VERSION }}
     
+    # Build with Gradle
     - name: Build Android Emulator
+      working-directory: Apps/AndroidEmulator
       run: |
-        cd Apps/AndroidEmulator
-        
         # Enable ccache
         export CC="ccache gcc"
         export CXX="ccache g++"
+        export CCACHE_CPP2=yes
         
-        # Build with maximum optimization
+        # Give gradle more memory
+        export GRADLE_OPTS="-Xmx4g -Dorg.gradle.daemon=false"
+        
+        # Build with all optimizations
         ./gradlew assembleRelease \
-          -Dorg.gradle.parallel=true \
-          -Dorg.gradle.workers.max=$(nproc) \
-          -Dorg.gradle.caching=true \
+          --no-daemon \
+          --parallel \
+          --build-cache \
+          --configure-on-demand \
+          --max-workers=$(nproc) \
+          -Dkotlin.compiler.execution.strategy=in-process \
           -Dkotlin.incremental=true \
           -Dkotlin.incremental.useClasspathSnapshot=true \
           -Pandroid.enableR8.fullMode=true \
           -Pandroid.enableD8.desugaring=true \
           -Pandroid.enableBuildCache=true \
-          -Pandroid.enableProfileJson=true \
-          -Pandroid.enableAppCompileTimeRClass=true \
-          -Pandroid.experimental.enableSourceSetPathsMap=true \
-          -Pandroid.experimental.cacheCompileLibResources=true
+          -Pandroid.enableProfileJson=true
     
+    # Upload APK
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
