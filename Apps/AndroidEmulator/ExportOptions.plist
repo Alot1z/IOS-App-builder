@@ -10,8 +10,8 @@
     <false/>
     <key>provisioningProfiles</key>
     <dict>
-        <key>com.alot1z.lightnovelpub</key>
-        <string>LightNovelPub Development</string>
+        <key>com.alot1z.androidemulator</key>
+        <string>Android Emulator Development</string>
     </dict>
 </dict>
 </plist>
