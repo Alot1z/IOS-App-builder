@@ -35,40 +35,41 @@ android {
         debug {
             minifyEnabled false
             shrinkResources false
+            jniDebuggable true
         }
     }
-    
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    
+
     kotlinOptions {
         jvmTarget = '17'
     }
-    
+
     buildFeatures {
         compose true
         buildConfig true
     }
-    
+
     composeOptions {
         kotlinCompilerExtensionVersion compose_version
     }
-    
+
     packaging {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
     }
-    
+
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
             version "3.22.1"
         }
     }
-    
+
     ndkVersion "$ANDROID_NDK_VERSION"
     buildToolsVersion "$ANDROID_BUILD_TOOLS_VERSION"
 }
