@@ -5,11 +5,17 @@ on:
     branches: [ main ]
     paths:
       - 'Apps/AndroidEmulator/**'
+      - '.github/workflows/android-emulator.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'Apps/AndroidEmulator/**'
+      - '.github/workflows/android-emulator.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_15.4.app/Contents/Developer
@@ -27,43 +33,42 @@ jobs:
         lfs: true
     
     - name: Setup Xcode
-      uses: maxim/setup-xcode@v1
+      uses: apple-actions/setup-xcode@v3
       with:
         xcode-version: '15.4'
+    
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        api-level: 33
+        build-tools-version: 33.0.0
+    
+    - name: Cache Dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          ~/Library/Caches/CocoaPods
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/*.gradle*', '**/Podfile.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
     
     - name: Install Dependencies
       run: |
         brew install imagemagick
         brew install swiftlint
         brew install create-dmg
-        
-        # Android SDK tools
-        brew install android-sdk
-        brew install android-ndk
-        
-        # CPU Emulation tools
         brew install qemu
-        
-        # GPU acceleration tools
         brew install mesa
-        
-        # Audio tools
         brew install portaudio
-        
-        # Network tools
         brew install libpcap
-    
-    - name: Setup Android SDK
-      run: |
-        export ANDROID_HOME=/usr/local/share/android-sdk
-        export ANDROID_NDK_HOME=/usr/local/share/android-ndk
-        
-        # Install required Android SDK packages
-        sdkmanager --install \
-          "platform-tools" \
-          "platforms;android-33" \
-          "build-tools;33.0.0" \
-          "system-images;android-33;google_apis;arm64-v8a"
     
     - name: Setup Build Environment
       run: |
@@ -77,26 +82,20 @@ jobs:
         swiftlint lint --reporter github-actions-logging
     
     - name: Build Core Components
+      id: build-core
+      continue-on-error: true
       run: |
         cd Apps/AndroidEmulator/src/core
-        
-        # Build CPU emulator
         make -f Makefile.cpu
-        
-        # Build GPU emulator
         make -f Makefile.gpu
-        
-        # Build audio subsystem
         make -f Makefile.audio
-        
-        # Build network stack
         make -f Makefile.network
     
     - name: Build Swift Components
+      id: build-swift
+      if: steps.build-core.outcome == 'success'
       run: |
         cd Apps/AndroidEmulator
-        
-        # Build Swift wrapper
         swiftc -sdk $SDKROOT \
           -target arm64-apple-ios16.0 \
           -O \
@@ -109,48 +108,35 @@ jobs:
           -o build/release/AndroidEmulator
     
     - name: Run Tests
+      if: steps.build-swift.outcome == 'success'
       run: |
         cd Apps/AndroidEmulator
-        
-        # Run CPU emulator tests
         ./tests/test_cpu.sh
-        
-        # Run GPU emulator tests
         ./tests/test_gpu.sh
-        
-        # Run audio tests
         ./tests/test_audio.sh
-        
-        # Run network tests
         ./tests/test_network.sh
-        
-        # Run integration tests
         ./tests/test_integration.sh
     
     - name: Package App
+      if: success()
       run: |
         cd Apps/AndroidEmulator
-        
-        # Create app bundle
         mkdir -p build/AndroidEmulator.app
         cp -r build/release/AndroidEmulator build/AndroidEmulator.app/
         cp -r resources/* build/AndroidEmulator.app/
-        
-        # Copy core components
         mkdir -p build/AndroidEmulator.app/Components
         cp build/core/cpu/libemulator-cpu.dylib build/AndroidEmulator.app/Components/
         cp build/core/gpu/libemulator-gpu.dylib build/AndroidEmulator.app/Components/
         cp build/core/audio/libemulator-audio.dylib build/AndroidEmulator.app/Components/
         cp build/core/network/libemulator-network.dylib build/AndroidEmulator.app/Components/
-        
-        # Create IPA
         cd build
         mkdir -p Payload
         cp -r AndroidEmulator.app Payload/
         zip -r AndroidEmulator.ipa Payload
     
     - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v3
+      if: success()
+      uses: actions/upload-artifact@v4
       with:
         name: AndroidEmulator
         path: |
@@ -158,10 +144,11 @@ jobs:
           Apps/AndroidEmulator/build/debug-symbols/
           Apps/AndroidEmulator/build/logs/
           Apps/AndroidEmulator/build/test-results/
+        retention-days: 5
     
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: |
           Apps/AndroidEmulator/build/AndroidEmulator.ipa
