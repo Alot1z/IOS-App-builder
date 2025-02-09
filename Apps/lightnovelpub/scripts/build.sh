@@ -16,89 +16,94 @@ while [[ "$#" -gt 0 ]]; do
         --enable-bitcode) enable_bitcode="$2"; shift ;;
         --enable-arc) enable_arc="$2"; shift ;;
         --deployment-target) deployment_target="$2"; shift ;;
-        --entitlements) entitlements="$2"; shift ;;
-        --features) features="$2"; shift ;;
-        --dependencies) dependencies="$2"; shift ;;
+        --build-type) build_type="$2"; shift ;;
+        --root-enabled) root_enabled="$2"; shift ;;
+        --exploit-enabled) exploit_enabled="$2"; shift ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
     shift
 done
 
-# Validate iOS version
-if [[ $(echo "$ios_version >= 16.0" | bc -l) -eq 0 ]] || [[ $(echo "$ios_version <= 17.0" | bc -l) -eq 0 ]]; then
-    echo "Error: iOS version must be between 16.0 and 17.0"
+# Required environment variables
+if [ -z "$SDKROOT" ]; then
+    echo "Error: SDKROOT environment variable not set"
     exit 1
 fi
 
-# Set up build directory
+# Validate iOS version
+if [ -z "$ios_version" ] || [ -z "$min_ios_version" ] || [ -z "$max_ios_version" ]; then
+    echo "Error: iOS version parameters missing"
+    exit 1
+fi
+
+# Set up build directories
 BUILD_DIR="build"
-mkdir -p "$BUILD_DIR"
+DERIVED_DATA_DIR="$BUILD_DIR/DerivedData"
+INTERMEDIATE_DIR="$DERIVED_DATA_DIR/Build/Intermediates.noindex"
+PRODUCTS_DIR="$DERIVED_DATA_DIR/Build/Products"
+
+mkdir -p "$BUILD_DIR" "$DERIVED_DATA_DIR" "$INTERMEDIATE_DIR" "$PRODUCTS_DIR"
+
+# Set up compilation flags
+SWIFT_FLAGS=(
+    "-target" "arm64-apple-ios${deployment_target}"
+    "-sdk" "$SDKROOT"
+    "-O${optimization_level:-0}"
+    "-g"  # Include debug symbols
+    "-swift-version" "5"
+    "-module-name" "LightNovelPub"
+)
+
+if [ "$enable_arc" = "true" ]; then
+    SWIFT_FLAGS+=("-enable-objc-arc")
+fi
+
+if [ "$build_type" = "release" ]; then
+    SWIFT_FLAGS+=("-whole-module-optimization")
+fi
+
+# Add frameworks
+FRAMEWORKS=(
+    "-framework" "UIKit"
+    "-framework" "WebKit"
+    "-framework" "SafariServices"
+    "-framework" "UserNotifications"
+    "-framework" "SwiftUI"
+)
 
 # Compile Swift files
 echo "Compiling Swift files..."
-swiftc -target arm64-apple-ios${deployment_target} \
-    -sdk "$(xcrun --show-sdk-path --sdk iphoneos)" \
-    -O${optimization_level} \
-    ${enable_arc:+-enable-arc} \
-    -framework UIKit \
-    -framework WebKit \
-    -framework SafariServices \
-    -framework UserNotifications \
-    -framework SwiftUI \
-    src/*.swift \
-    -o "$BUILD_DIR/LightNovelPub"
+swift build \
+    --configuration release \
+    --build-path "$BUILD_DIR" \
+    --sdk "$SDKROOT" \
+    --target "arm64-apple-ios${deployment_target}" \
+    ${SWIFT_FLAGS[@]} \
+    ${FRAMEWORKS[@]}
 
 # Create app bundle
-APP_BUNDLE="$BUILD_DIR/LightNovelPub.app"
-mkdir -p "$APP_BUNDLE"
-mv "$BUILD_DIR/LightNovelPub" "$APP_BUNDLE/"
+APP_BUNDLE_DIR="$BUILD_DIR/LightNovelPub.app"
+mkdir -p "$APP_BUNDLE_DIR"
 
-# Generate Info.plist
-echo "Generating Info.plist..."
-"../../tools/scripts/create_plist.sh" \
-    --bundle-id "com.alot1z.lightnovelpub" \
-    --app-name "LightNovel Pub" \
-    --app-version "$app_version" \
-    --min-ios-version "$min_ios_version" \
-    --max-ios-version "$max_ios_version" \
-    --output "$APP_BUNDLE/Info.plist"
+# Copy resources
+cp -R resources/* "$APP_BUNDLE_DIR/"
+cp build/Info.plist "$APP_BUNDLE_DIR/"
 
-# Generate app icons
-echo "Generating app icons..."
-"../../tools/scripts/generate_icons.sh" \
-    --input "assets/icon.png" \
-    --output "$APP_BUNDLE"
+# Copy binary
+cp "$BUILD_DIR/release/LightNovelPub" "$APP_BUNDLE_DIR/"
 
-# Sign the app
-echo "Signing app..."
-ENTITLEMENTS_FILE="$BUILD_DIR/entitlements.plist"
-echo '<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>' > "$ENTITLEMENTS_FILE"
+# If root is enabled, add root components
+if [ "$root_enabled" = "true" ]; then
+    echo "Adding root components..."
+    mkdir -p "$APP_BUNDLE_DIR/root"
+    cp src/root/giveMeRoot.m "$APP_BUNDLE_DIR/root/"
+fi
 
-# Add entitlements
-IFS=',' read -ra ENTITLEMENT_ARRAY <<< "$entitlements"
-for entitlement in "${ENTITLEMENT_ARRAY[@]}"; do
-    echo "    <key>$entitlement</key><true/>" >> "$ENTITLEMENTS_FILE"
-done
+# If exploit is enabled, add exploit components
+if [ "$exploit_enabled" = "true" ]; then
+    echo "Adding exploit components..."
+    mkdir -p "$APP_BUNDLE_DIR/exploits"
+    cp -R src/exploits/* "$APP_BUNDLE_DIR/exploits/"
+fi
 
-echo '</dict>
-</plist>' >> "$ENTITLEMENTS_FILE"
-
-# Sign with ldid
-"../../tools/bin/ldid" -S"$ENTITLEMENTS_FILE" "$APP_BUNDLE/LightNovelPub"
-
-# Create IPA
-echo "Creating IPA..."
-mkdir -p "$BUILD_DIR/Payload"
-cp -r "$APP_BUNDLE" "$BUILD_DIR/Payload/"
-cd "$BUILD_DIR"
-zip -r "LightNovelPub.ipa" "Payload"
-cd ..
-
-# Clean up
-rm -rf "$BUILD_DIR/Payload"
-rm -f "$ENTITLEMENTS_FILE"
-
-echo "Build complete! IPA is at $BUILD_DIR/LightNovelPub.ipa"
+echo "Build completed successfully!"

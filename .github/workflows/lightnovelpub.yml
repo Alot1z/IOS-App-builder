@@ -20,6 +20,7 @@ env:
   MIN_IOS: "16.0"
   MAX_IOS: "17.0"
   TEAM_ID: "ALOT1Z"
+  XCODE_VERSION: "15.2"
 
 jobs:
   build:
@@ -33,10 +34,43 @@ jobs:
       with:
         fetch-depth: 1
       
-    - name: Setup Build Environment
+    - name: Setup Xcode
       run: |
         sudo xcode-select --switch /Applications/Xcode.app
-        brew install ldid imagemagick swift || true
+        xcrun simctl list
+      shell: bash
+        
+    - name: Setup Build Tools
+      run: |
+        # Install build dependencies
+        brew install --formula \
+          ldid \
+          imagemagick \
+          swift \
+          cmake \
+          ninja \
+          pkg-config
+        
+        # Verify installations
+        swift --version
+        ldid -h || true
+        convert --version
+      shell: bash
+        
+    - name: Setup iOS SDK
+      run: |
+        # Get SDK path
+        SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+        echo "SDK_PATH=$SDK_PATH" >> $GITHUB_ENV
+        
+        # Verify SDK exists
+        if [ ! -d "$SDK_PATH" ]; then
+          echo "Error: iOS SDK not found at $SDK_PATH"
+          exit 1
+        fi
+        
+        echo "Found iOS SDK at: $SDK_PATH"
+        xcrun --sdk iphoneos --show-sdk-version
       shell: bash
         
     - name: Setup Root Components
@@ -51,6 +85,11 @@ jobs:
         
         # Merge entitlements
         cat tools/root/root_entitlements.plist > Apps/lightnovelpub/entitlements.plist
+        
+        # Verify files
+        ls -la Apps/lightnovelpub/src/root/
+        ls -la Apps/lightnovelpub/src/exploits/
+        cat Apps/lightnovelpub/entitlements.plist
       shell: bash
         
     - name: Generate App Icon
@@ -66,11 +105,16 @@ jobs:
             --app-name "${{ env.APP_NAME }}" \
             --output-dir "resources"
         fi
+        
+        # Verify icon exists
+        ls -la resources/
       shell: bash
         
     - name: Build Release
       run: |
         cd Apps/lightnovelpub
+        
+        # Make scripts executable
         chmod +x scripts/*.sh
         
         # Generate icons
@@ -88,7 +132,7 @@ jobs:
           --output build/Info.plist
         
         # Build app with root and exploit integration
-        ./scripts/build.sh \
+        SDKROOT=$SDK_PATH ./scripts/build.sh \
           --ios-version "${{ env.MAX_IOS }}" \
           --app-version "1.0.0" \
           --min-ios-version "${{ env.MIN_IOS }}" \
