@@ -1,178 +1,169 @@
-name: Build LightNovel Pub App
+name: 🚀 LightNovelPub Turbo Build
 
 on:
-  workflow_dispatch:
   push:
+    branches: [ main ]
     paths:
       - 'Apps/lightnovelpub/**'
-      - '.github/workflows/lightnovelpub.yml'
-      - 'tools/root/**'
-      - 'tools/assets/**'
-      - 'Exploits/**'
-
-permissions:
-  contents: read
-  actions: write
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'Apps/lightnovelpub/**'
+  workflow_dispatch:
 
 env:
-  APP_NAME: LightNovel Pub
-  BUNDLE_ID: com.alot1z.lightnovelpub
-  MIN_IOS: "16.0"
-  MAX_IOS: "17.0"
-  TEAM_ID: "ALOT1Z"
-  XCODE_VERSION: "15.2"
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+  CCACHE_DIR: ~/.ccache
+  FASTLANE_SKIP_UPDATE_CHECK: true
+  FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: 180
+  MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
 
 jobs:
-  build:
-    name: Build iOS App
-    runs-on: macos-14
-    timeout-minutes: 30
+  turbo-build:
+    name: 🏎️ Turbo Build
+    runs-on: macos-latest
+    env:
+      MINT_PATH: mint/lib
+      MINT_LINK_PATH: mint/bin
     
     steps:
-    - name: Checkout Code
+    - name: ⚡ Turbo Checkout
       uses: actions/checkout@v4
       with:
         fetch-depth: 1
-      
-    - name: Setup Xcode
+        lfs: true
+    
+    # MAXIMUM CACHING
+    - name: 💾 Mega Cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/Library/Caches/org.swift.swiftpm
+          ~/Library/Caches/Homebrew
+          ~/Library/Caches/CocoaPods
+          ~/Library/Developer/Xcode/DerivedData
+          ~/.ccache
+          Apps/lightnovelpub/build
+          Apps/lightnovelpub/.build
+          Apps/lightnovelpub/icon-cache
+          mint
+        key: ${{ runner.os }}-turbo-${{ hashFiles('Apps/lightnovelpub/**') }}
+        restore-keys: |
+          ${{ runner.os }}-turbo-
+    
+    # TURBO SETUP
+    - name: 🚄 Turbo Setup
       run: |
-        sudo xcode-select --switch /Applications/Xcode.app
-        xcrun simctl list
-      shell: bash
+        # Install optimized build tools
+        brew install ccache
+        brew install ninja
+        brew install fastlane
         
-    - name: Setup Build Tools
-      run: |
-        # Install build dependencies
-        brew install --formula \
-          ldid \
-          imagemagick \
-          swift \
-          cmake \
-          ninja \
-          pkg-config
+        # Setup ccache
+        ccache --max-size=50G
+        ccache --set-config=compression=true
+        ccache --set-config=compression_level=9
+        ccache --set-config=cache_dir=~/.ccache
         
-        # Verify installations
-        swift --version
-        ldid -h || true
-        convert --version
-      shell: bash
+        # Optimize Xcode
+        defaults write com.apple.dt.XCBuild EnableSwiftBuildSystemIntegration 1
+        defaults write com.apple.dt.Xcode BuildSystemScheduleInherentlyParallelCommandsSerially -bool NO
+        defaults write com.apple.dt.Xcode IDEBuildOperationMaxNumberOfConcurrentCompileTasks $(sysctl -n hw.ncpu)
         
-    - name: Setup iOS SDK
-      run: |
-        # Get SDK path
-        SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-        echo "SDK_PATH=$SDK_PATH" >> $GITHUB_ENV
-        
-        # Verify SDK exists
-        if [ ! -d "$SDK_PATH" ]; then
-          echo "Error: iOS SDK not found at $SDK_PATH"
-          exit 1
-        fi
-        
-        echo "Found iOS SDK at: $SDK_PATH"
-        xcrun --sdk iphoneos --show-sdk-version
-      shell: bash
-        
-    - name: Setup Root Components
-      run: |
-        # Copy root helper
-        mkdir -p Apps/lightnovelpub/src/root
-        cp tools/root/giveMeRoot.m Apps/lightnovelpub/src/root/
-        
-        # Copy exploit files
-        mkdir -p Apps/lightnovelpub/src/exploits
-        cp -r Exploits/CVE_2023_42824/* Apps/lightnovelpub/src/exploits/
-        
-        # Merge entitlements
-        cat tools/root/root_entitlements.plist > Apps/lightnovelpub/entitlements.plist
-        
-        # Verify files
-        ls -la Apps/lightnovelpub/src/root/
-        ls -la Apps/lightnovelpub/src/exploits/
-        cat Apps/lightnovelpub/entitlements.plist
-      shell: bash
-        
-    - name: Generate App Icon
+        # Pre-heat Swift compiler
+        xcrun swift --version
+    
+    # PARALLEL ICON GENERATION
+    - name: 🎨 Generate Icons
       run: |
         cd Apps/lightnovelpub
         
-        # Check if custom icon exists, if not generate default
-        if [ ! -f "resources/icon.png" ]; then
-          echo "No custom icon found, generating default icon..."
-          mkdir -p resources
-          chmod +x ../../tools/assets/generate_default_icon.sh
-          ../../tools/assets/generate_default_icon.sh \
-            --app-name "${{ env.APP_NAME }}" \
-            --output-dir "resources"
-        fi
+        # Use parallel processing for icons
+        parallel_icon_gen() {
+          size=$1
+          output=$2
+          sips -z $size $size "assets/Light_Novel_pub_Icon.png" --out "$output" &
+        }
         
-        # Verify icon exists
-        ls -la resources/
-      shell: bash
-        
-    - name: Build Release
+        # Generate all sizes in parallel
+        mkdir -p build/Assets.xcassets/AppIcon.appiconset
+        parallel_icon_gen 1024 "build/Assets.xcassets/AppIcon.appiconset/1024.png"
+        parallel_icon_gen 180 "build/Assets.xcassets/AppIcon.appiconset/180.png"
+        parallel_icon_gen 167 "build/Assets.xcassets/AppIcon.appiconset/167.png"
+        parallel_icon_gen 152 "build/Assets.xcassets/AppIcon.appiconset/152.png"
+        parallel_icon_gen 120 "build/Assets.xcassets/AppIcon.appiconset/120.png"
+        parallel_icon_gen 87 "build/Assets.xcassets/AppIcon.appiconset/87.png"
+        parallel_icon_gen 80 "build/Assets.xcassets/AppIcon.appiconset/80.png"
+        parallel_icon_gen 76 "build/Assets.xcassets/AppIcon.appiconset/76.png"
+        parallel_icon_gen 60 "build/Assets.xcassets/AppIcon.appiconset/60.png"
+        parallel_icon_gen 58 "build/Assets.xcassets/AppIcon.appiconset/58.png"
+        parallel_icon_gen 40 "build/Assets.xcassets/AppIcon.appiconset/40.png"
+        wait
+    
+    # TURBO BUILD
+    - name: 🏃 Turbo Build
+      env:
+        DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
       run: |
         cd Apps/lightnovelpub
         
-        # Create build directory structure
-        mkdir -p build/DerivedData/Build/{Intermediates.noindex,Products}
-        mkdir -p build/logs
-        mkdir -p build/debug-symbols
+        # Enable all optimizations
+        export SWIFT_COMPILATION_MODE=wholemodule
+        export SWIFT_OPTIMIZATION_LEVEL=-O
+        export SWIFT_WHOLE_MODULE_OPTIMIZATION=YES
+        export SWIFT_USE_PARALLEL_WHOLE_MODULE_OPTIMIZATION=YES
+        export SWIFT_PARALLEL_MODULE_JOBS=$(sysctl -n hw.ncpu)
+        export COMPILER_INDEX_STORE_ENABLE=NO
+        export CC="ccache clang"
+        export CXX="ccache clang++"
+        export CCACHE_CPP2=yes
+        export CCACHE_SLOPPINESS=file_macro,time_macros,locale,file_stat_matches
         
-        # Make scripts executable
-        chmod +x scripts/*.sh
-        
-        # Generate icons
-        ./scripts/generate_icons.sh \
-          --input resources/icon.png \
-          --output build/
-        
-        # Create Info.plist
-        ./scripts/create_plist.sh \
-          --bundle-id "${{ env.BUNDLE_ID }}" \
-          --app-name "${{ env.APP_NAME }}" \
-          --app-version "1.0.0" \
-          --min-ios-version "${{ env.MIN_IOS }}" \
-          --max-ios-version "${{ env.MAX_IOS }}" \
-          --output build/Info.plist
-        
-        # Build app with root and exploit integration
-        SDKROOT=$SDK_PATH ./scripts/build.sh \
-          --ios-version "${{ env.MAX_IOS }}" \
-          --app-version "1.0.0" \
-          --min-ios-version "${{ env.MIN_IOS }}" \
-          --max-ios-version "${{ env.MAX_IOS }}" \
-          --optimization-level 3 \
-          --enable-bitcode false \
-          --enable-arc true \
-          --deployment-target "${{ env.MIN_IOS }}" \
-          --build-type release \
-          --root-enabled true \
-          --exploit-enabled true
-        
-        # Sign with entitlements
-        ./scripts/sign_app.sh \
-          --app "build/${{ env.APP_NAME }}.app" \
-          --entitlements entitlements.plist
-      shell: bash
-        
-    - name: Package IPA
+        # Run multiple tasks in parallel
+        {
+          # Build with maximum optimization
+          xcodebuild -scheme LightNovelPub \
+            -configuration Release \
+            -destination generic/platform=iOS \
+            -derivedDataPath build/DerivedData \
+            -parallelizeTargets \
+            -jobs $(sysctl -n hw.ncpu) \
+            ONLY_ACTIVE_ARCH=NO \
+            ENABLE_BITCODE=NO \
+            ENABLE_TESTABILITY=NO \
+            GCC_OPTIMIZATION_LEVEL=fast \
+            SWIFT_OPTIMIZATION_LEVEL=-O \
+            SWIFT_COMPILATION_MODE=wholemodule \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+            SWIFT_WHOLE_MODULE_OPTIMIZATION=YES \
+            clean build
+            
+        } &> build.log
+    
+    # PACKAGE IPA
+    - name: 📦 Create IPA
       run: |
-        cd Apps/lightnovelpub/build
-        mkdir -p Payload
-        cp -r "${{ env.APP_NAME }}.app" Payload/
-        zip -r "${{ env.APP_NAME }}.ipa" Payload
-        rm -rf Payload
-      shell: bash
+        cd Apps/lightnovelpub
         
-    - name: Upload Release IPA
+        # Create IPA structure
+        mkdir -p Payload/LightNovelPub.app
+        cp -r build/DerivedData/Build/Products/Release-iphoneos/* Payload/LightNovelPub.app/
+        
+        # Create optimized IPA
+        zip -9r LightNovelPub.ipa Payload
+    
+    # UPLOAD
+    - name: ⬆️ Upload IPA
       uses: actions/upload-artifact@v4
       with:
-        name: LightNovelPub-Release
-        path: |
-          Apps/lightnovelpub/build/*.ipa
-          Apps/lightnovelpub/build/logs/
-          Apps/lightnovelpub/build/debug-symbols/
-        retention-days: 90
-        compression-level: 9
-        overwrite: true
+        name: LightNovelPub-IPA
+        path: Apps/lightnovelpub/LightNovelPub.ipa
+        retention-days: 5
+    
+    # CLEANUP
+    - name: 🧹 Cleanup
+      if: always()
+      run: |
+        cd Apps/lightnovelpub
+        rm -rf build/DerivedData
+        ccache --cleanup
