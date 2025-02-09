@@ -1,4 +1,4 @@
-name: Build iOS App
+name: LightNovelPub iOS App
 
 on:
   push:
@@ -7,6 +7,8 @@ on:
     branches: [ main ]
 
 env:
+  DEVELOPER_DIR: /Applications/Xcode_15.4.app/Contents/Developer
+  SDKROOT: /Applications/Xcode_15.4.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS17.5.sdk
   APP_DIR: Apps/lightnovelpub
   APP_NAME: "LightNovel Pub"
   BUNDLE_ID: "com.alot1z.lightnovelpub"
@@ -17,38 +19,74 @@ jobs:
     runs-on: macos-latest
     
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       
-    - name: Setup Build Tools
+    - name: Setup Xcode
+      uses: maxim/setup-xcode@v1
+      with:
+        xcode-version: '15.4'
+    
+    - name: Install Dependencies
       run: |
         brew install imagemagick
-        sudo xcode-select -s /Applications/Xcode.app
-          
+        brew install swiftlint
+    
+    - name: Setup Build Environment
+      run: |
+        mkdir -p build/release
+        mkdir -p build/logs
+        mkdir -p build/debug-symbols
+    
     - name: Generate App Icons
       run: |
         cd Apps/lightnovelpub
         chmod +x scripts/generate_icons.sh
         ./scripts/generate_icons.sh assets/icon.png
-          
-    - name: Build iOS App
+      
+    - name: Build App
       run: |
         cd Apps/lightnovelpub
         chmod +x scripts/build.sh
         ./scripts/build.sh \
-          --ios-version 17.0 \
-          --app-version 1.0.0 \
-          --min-ios-version 16.0 \
-          --max-ios-version 17.0 \
+          --ios-version "17.0" \
+          --app-version "1.0.0" \
+          --min-ios-version "16.0" \
+          --max-ios-version "17.0" \
           --optimization-level 3 \
           --enable-bitcode false \
           --enable-arc true \
-          --deployment-target 16.0 \
+          --deployment-target "16.0" \
+          --build-type "release" \
+          --root-enabled false \
+          --exploit-enabled false \
           --entitlements com.apple.security.network.client,com.apple.security.network.server,com.apple.private.security.no-container,com.apple.developer.usernotifications.time-sensitive,com.apple.developer.default-data-protection \
           --features reader_mode,offline_storage,chapter_download,push_notifications,dark_mode,custom_themes,ios17_features \
           --dependencies WebKit,SafariServices,UserNotifications,SwiftUI
-        
-    - name: Upload IPA
-      uses: actions/upload-artifact@v2
+    
+    - name: Run Tests
+      run: |
+        if [ -f "Apps/lightnovelpub/scripts/test.sh" ]; then
+          cd Apps/lightnovelpub
+          chmod +x scripts/test.sh
+          ./scripts/test.sh
+        fi
+    
+    - name: Package App
+      run: |
+        cd Apps/lightnovelpub/build
+        zip -r LightNovelPub.ipa Payload/
+    
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
       with:
-        name: LightNovelPub.ipa
-        path: Apps/lightnovelpub/build/LightNovelPub.ipa
+        name: LightNovelPub
+        path: |
+          Apps/lightnovelpub/build/LightNovelPub.ipa
+          Apps/lightnovelpub/build/debug-symbols/
+          Apps/lightnovelpub/build/logs/
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        rm -rf Apps/lightnovelpub/build/DerivedData
+        rm -rf Apps/lightnovelpub/build/Intermediates.noindex
