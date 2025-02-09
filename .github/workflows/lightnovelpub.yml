@@ -1,4 +1,4 @@
-name: 📱 LightNovelPub iOS Build
+name: LightNovel Pub Build
 
 on:
   push:
@@ -33,6 +33,17 @@ jobs:
       run: |
         sudo xcode-select --switch /Applications/Xcode.app
         defaults write com.apple.dt.Xcode IDEBuildOperationMaxNumberOfConcurrentCompileTasks $(sysctl -n hw.ncpu)
+        
+    - name: Cache Build
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/Library/Caches/org.swift.swiftpm
+          ~/Library/Developer/Xcode/DerivedData
+          Apps/lightnovelpub/build
+        key: ${{ runner.os }}-build-${{ hashFiles('Apps/lightnovelpub/**') }}
+        restore-keys: |
+          ${{ runner.os }}-build-
     
     - name: Prepare Build
       run: |
@@ -53,15 +64,38 @@ jobs:
           <key>CFBundleIdentifier</key><string>'${BUNDLE_ID}'</string>
           <key>CFBundleName</key><string>'${APP_NAME}'</string>
           <key>CFBundleVersion</key><string>1.0.0</string>
+          <key>CFBundleShortVersionString</key><string>1.0.0</string>
           <key>MinimumOSVersion</key><string>'${MIN_IOS}'</string>
+          <key>UIDeviceFamily</key><array>
+            <integer>1</integer>
+            <integer>2</integer>
+          </array>
+          <key>UISupportedInterfaceOrientations</key>
+          <array>
+            <string>UIInterfaceOrientationPortrait</string>
+            <string>UIInterfaceOrientationLandscapeLeft</string>
+            <string>UIInterfaceOrientationLandscapeRight</string>
+          </array>
+          <key>UILaunchStoryboardName</key>
+          <string>LaunchScreen</string>
+          <key>UIRequiresFullScreen</key>
+          <true/>
         </dict></plist>' > build/Info.plist
     
     - name: Build App
       run: |
         cd Apps/lightnovelpub
+        
+        # Set build environment
+        export SWIFT_COMPILATION_MODE=wholemodule
+        export SWIFT_OPTIMIZATION_LEVEL=-O
+        export SWIFT_USE_PARALLEL_WHOLE_MODULE_OPTIMIZATION=YES
+        export SWIFT_PARALLEL_MODULE_JOBS=$(sysctl -n hw.ncpu)
+        
         xcodebuild -scheme LightNovelPub \
           -configuration Release \
           -destination generic/platform=iOS \
+          -derivedDataPath build/DerivedData \
           ONLY_ACTIVE_ARCH=NO \
           BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
           SWIFT_OPTIMIZATION_LEVEL=-O \
