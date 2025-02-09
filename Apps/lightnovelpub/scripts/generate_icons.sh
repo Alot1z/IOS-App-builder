@@ -9,13 +9,8 @@ if ! command -v magick &> /dev/null; then
     exit 1
 fi
 
-# Input validation
-if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <source_icon.png>"
-    exit 1
-fi
-
-SOURCE_ICON="$1"
+# Set source icon path
+SOURCE_ICON="assets/Light_Novel_pub_Icon.png"
 
 # Check if source icon exists
 if [ ! -f "$SOURCE_ICON" ]; then
@@ -26,14 +21,20 @@ fi
 # Create Assets.xcassets directory structure
 mkdir -p "build/Assets.xcassets/AppIcon.appiconset"
 
-# Function to generate icon
+# Function to generate icon with proper background and padding
 generate_icon() {
     local size="$1"
     local scale="$2"
     local target_size=$((size * scale))
     
     echo "Generating ${target_size}x${target_size} icon..."
-    magick "$SOURCE_ICON" -resize "${target_size}x${target_size}" \
+    
+    # Add padding and resize
+    magick "$SOURCE_ICON" \
+        -resize "${target_size}x${target_size}" \
+        -background none \
+        -gravity center \
+        -extent "${target_size}x${target_size}" \
         "build/Assets.xcassets/AppIcon.appiconset/icon_${size}x${size}@${scale}x.png"
 }
 
@@ -60,7 +61,11 @@ generate_icon 76 2  # 152x152
 generate_icon 83.5 2  # 167x167
 
 # App Store
-magick "$SOURCE_ICON" -resize 1024x1024 \
+magick "$SOURCE_ICON" \
+    -resize 1024x1024 \
+    -background none \
+    -gravity center \
+    -extent 1024x1024 \
     "build/Assets.xcassets/AppIcon.appiconset/icon_1024x1024@1x.png"
 
 # Generate Contents.json
