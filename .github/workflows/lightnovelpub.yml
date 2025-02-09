@@ -52,7 +52,8 @@ jobs:
         rm -rf Payload
         
     - name: Upload IPA
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: LightNovelPub-unsigned
         path: build/LightNovelPub.xcarchive/Products/Applications/LightNovelPub.ipa
+        retention-days: 5
