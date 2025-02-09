@@ -25,7 +25,7 @@ jobs:
         working-directory: Apps/AndroidEmulator
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Setup Xcode
       uses: maxim-lobanov/setup-xcode@v1
