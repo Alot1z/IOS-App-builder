@@ -23,23 +23,31 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
     
     - name: Set up Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
         xcode-version: '15.2'
     
+    - name: Debug directory structure
+      run: |
+        pwd
+        ls -la
+        ls -la Apps || echo "Apps directory not found"
+    
     - name: Set up build directory
       run: |
         mkdir -p build
         
     - name: Build unsigned app
+      working-directory: ${{ github.workspace }}/Apps/AndroidEmulator
       run: |
-        cd Apps/AndroidEmulator
         xcodebuild -project AndroidEmulator.xcodeproj \
           -scheme AndroidEmulator \
           -configuration Release \
-          -archivePath ../../build/AndroidEmulator.xcarchive \
+          -archivePath ${{ github.workspace }}/build/AndroidEmulator.xcarchive \
           -destination 'generic/platform=iOS' \
           -sdk iphoneos \
           archive \
@@ -48,8 +56,8 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
           
     - name: Package IPA
+      working-directory: ${{ github.workspace }}/build/AndroidEmulator.xcarchive/Products/Applications
       run: |
-        cd build/AndroidEmulator.xcarchive/Products/Applications
         mkdir -p Payload
         cp -r AndroidEmulator.app Payload/
         zip -r AndroidEmulator.ipa Payload
@@ -58,5 +66,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: AndroidEmulator-unsigned
-        path: build/AndroidEmulator.xcarchive/Products/Applications/AndroidEmulator.ipa
+        path: ${{ github.workspace }}/build/AndroidEmulator.xcarchive/Products/Applications/AndroidEmulator.ipa
         retention-days: 5

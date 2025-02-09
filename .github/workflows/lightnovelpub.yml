@@ -19,23 +19,31 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
     
     - name: Set up Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
         xcode-version: '15.2'
     
+    - name: Debug directory structure
+      run: |
+        pwd
+        ls -la
+        ls -la Apps || echo "Apps directory not found"
+    
     - name: Set up build directory
       run: |
         mkdir -p build
         
     - name: Build unsigned app
+      working-directory: ${{ github.workspace }}/Apps/lightnovelpub
       run: |
-        cd Apps/lightnovelpub
         xcodebuild -project LightNovelPub.xcodeproj \
           -scheme LightNovelPub \
           -configuration Release \
-          -archivePath ../../build/LightNovelPub.xcarchive \
+          -archivePath ${{ github.workspace }}/build/LightNovelPub.xcarchive \
           -destination 'generic/platform=iOS' \
           -sdk iphoneos \
           archive \
@@ -44,8 +52,8 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
           
     - name: Package IPA
+      working-directory: ${{ github.workspace }}/build/LightNovelPub.xcarchive/Products/Applications
       run: |
-        cd build/LightNovelPub.xcarchive/Products/Applications
         mkdir -p Payload
         cp -r LightNovelPub.app Payload/
         zip -r LightNovelPub.ipa Payload
@@ -54,5 +62,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: LightNovelPub-unsigned
-        path: build/LightNovelPub.xcarchive/Products/Applications/LightNovelPub.ipa
+        path: ${{ github.workspace }}/build/LightNovelPub.xcarchive/Products/Applications/LightNovelPub.ipa
         retention-days: 5
