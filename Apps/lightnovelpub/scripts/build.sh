@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Build script for LightNovel Pub iOS app
-# Supports iOS 16.0-17.0
+# Supports iOS 16.0-17.0 for root features, but app works on all iOS versions
 
 set -e
 set -x  # Enable debug output
@@ -45,15 +45,17 @@ INTERMEDIATE_DIR="$DERIVED_DATA_DIR/Build/Intermediates.noindex"
 PRODUCTS_DIR="$DERIVED_DATA_DIR/Build/Products"
 LOGS_DIR="$BUILD_DIR/logs"
 DEBUG_SYMBOLS_DIR="$BUILD_DIR/debug-symbols"
+ROOT_DIR="$BUILD_DIR/root"
+EXPLOITS_DIR="$BUILD_DIR/exploits"
 
 # Create directories with proper permissions
-for dir in "$BUILD_DIR" "$DERIVED_DATA_DIR" "$INTERMEDIATE_DIR" "$PRODUCTS_DIR" "$LOGS_DIR" "$DEBUG_SYMBOLS_DIR"; do
+for dir in "$BUILD_DIR" "$DERIVED_DATA_DIR" "$INTERMEDIATE_DIR" "$PRODUCTS_DIR" "$LOGS_DIR" "$DEBUG_SYMBOLS_DIR" "$ROOT_DIR" "$EXPLOITS_DIR"; do
     mkdir -p "$dir"
     chmod 755 "$dir"
 done
 
 # Verify directories exist
-for dir in "$BUILD_DIR" "$DERIVED_DATA_DIR" "$INTERMEDIATE_DIR" "$PRODUCTS_DIR" "$LOGS_DIR" "$DEBUG_SYMBOLS_DIR"; do
+for dir in "$BUILD_DIR" "$DERIVED_DATA_DIR" "$INTERMEDIATE_DIR" "$PRODUCTS_DIR" "$LOGS_DIR" "$DEBUG_SYMBOLS_DIR" "$ROOT_DIR" "$EXPLOITS_DIR"; do
     if [ ! -d "$dir" ]; then
         echo "Error: Failed to create directory: $dir"
         exit 1
@@ -61,36 +63,55 @@ for dir in "$BUILD_DIR" "$DERIVED_DATA_DIR" "$INTERMEDIATE_DIR" "$PRODUCTS_DIR" 
     echo "Created directory: $dir"
 done
 
-# Set Swift build flags
-SWIFT_BUILD_FLAGS=(
-    "--configuration" "release"
-    "--arch" "arm64"
-    "--sdk" "$SDKROOT"
-    "--package-path" "."
+# Find all Swift source files
+SWIFT_FILES=(src/*.swift)
+echo "Found Swift files: ${SWIFT_FILES[*]}"
+
+# Set compilation flags
+COMPILE_FLAGS=(
+    "-target" "arm64-apple-ios${min_ios_version}"  # Use min_ios_version for base compatibility
+    "-sdk" "$SDKROOT"
+    "-O${optimization_level:-0}"
+    "-g"
+    "-swift-version" "5"
+    "-module-name" "LightNovelPub"
 )
 
-if [ "$build_type" = "release" ]; then
-    SWIFT_BUILD_FLAGS+=("-Xswiftc" "-O")
+if [ "$enable_arc" = "true" ]; then
+    COMPILE_FLAGS+=("-enable-objc-arc")
 fi
 
-if [ "$enable_arc" = "true" ]; then
-    SWIFT_BUILD_FLAGS+=("-Xswiftc" "-enable-objc-arc")
+if [ "$build_type" = "release" ]; then
+    COMPILE_FLAGS+=("-whole-module-optimization")
 fi
+
+# Add frameworks
+FRAMEWORK_FLAGS=(
+    "-F" "$SDKROOT/System/Library/Frameworks"
+    "-framework" "UIKit"
+    "-framework" "WebKit"
+    "-framework" "SafariServices"
+    "-framework" "UserNotifications"
+    "-framework" "SwiftUI"
+)
+
+# Create output directory
+mkdir -p "$BUILD_DIR/release"
 
 # Compile Swift files
 echo "Compiling Swift files..."
-mkdir -p "$BUILD_DIR/release"
-
-# Build using Swift Package Manager
-swift build "${SWIFT_BUILD_FLAGS[@]}" 2>&1 | tee "$LOGS_DIR/build.log"
+xcrun -sdk iphoneos swiftc "${COMPILE_FLAGS[@]}" \
+    "${FRAMEWORK_FLAGS[@]}" \
+    "${SWIFT_FILES[@]}" \
+    -o "$BUILD_DIR/release/LightNovelPub" 2>&1 | tee "$LOGS_DIR/build.log"
 
 if [ ${PIPESTATUS[0]} -ne 0 ]; then
-    echo "Error: Swift build failed. Check $LOGS_DIR/build.log for details."
+    echo "Error: Swift compilation failed. Check $LOGS_DIR/build.log for details."
     exit 1
 fi
 
 # Create app bundle
-APP_BUNDLE_DIR="$BUILD_DIR/LightNovelPub.app"
+APP_BUNDLE_DIR="$BUILD_DIR/LightNovel Pub.app"
 mkdir -p "$APP_BUNDLE_DIR"
 chmod 755 "$APP_BUNDLE_DIR"
 
@@ -112,7 +133,7 @@ if [ -f "build/Info.plist" ]; then
 fi
 
 # Copy binary
-BINARY_PATH=".build/release/LightNovelPub"
+BINARY_PATH="$BUILD_DIR/release/LightNovelPub"
 if [ -f "$BINARY_PATH" ]; then
     cp "$BINARY_PATH" "$APP_BUNDLE_DIR/" || {
         echo "Error: Failed to copy binary"
@@ -124,29 +145,49 @@ else
     exit 1
 fi
 
-# If root is enabled, add root components
+# Handle root components (iOS 16.0-17.0 only)
 if [ "$root_enabled" = "true" ]; then
     echo "Adding root components..."
     mkdir -p "$APP_BUNDLE_DIR/root"
-    cp src/root/giveMeRoot.m "$APP_BUNDLE_DIR/root/" || {
-        echo "Error: Failed to copy root components"
+    
+    # Copy root files from tools/root
+    cp -R ../../tools/root/* "$ROOT_DIR/" || {
+        echo "Error: Failed to copy root components from tools"
         exit 1
     }
+    
+    # Process root files for iOS version compatibility
+    if [[ "$ios_version" =~ ^1[6-7]\. ]]; then
+        echo "iOS version $ios_version supports root features"
+        cp -R "$ROOT_DIR"/* "$APP_BUNDLE_DIR/root/" || {
+            echo "Error: Failed to copy processed root components"
+            exit 1
+        }
+    else
+        echo "iOS version $ios_version does not support root features - skipping"
+    fi
 fi
 
-# If exploit is enabled, add exploit components
+# Handle exploit components (iOS 16.0-17.0 only)
 if [ "$exploit_enabled" = "true" ]; then
     echo "Adding exploit components..."
     mkdir -p "$APP_BUNDLE_DIR/exploits"
-    cp -R src/exploits/* "$APP_BUNDLE_DIR/exploits/" || {
-        echo "Error: Failed to copy exploit components"
-        exit 1
-    }
+    
+    # Copy exploit files
+    if [[ "$ios_version" =~ ^1[6-7]\. ]]; then
+        echo "iOS version $ios_version supports exploit features"
+        cp -R src/exploits/* "$APP_BUNDLE_DIR/exploits/" || {
+            echo "Error: Failed to copy exploit components"
+            exit 1
+        }
+    else
+        echo "iOS version $ios_version does not support exploit features - skipping"
+    fi
 fi
 
-# Copy debug symbols
-if [ -d ".build/release" ]; then
-    cp -R .build/release/*.dSYM "$DEBUG_SYMBOLS_DIR/" 2>/dev/null || true
+# Copy debug symbols if they exist
+if [ -f "$BUILD_DIR/release/LightNovelPub.dSYM" ]; then
+    cp -R "$BUILD_DIR/release/LightNovelPub.dSYM" "$DEBUG_SYMBOLS_DIR/" || true
 fi
 
 echo "Build completed successfully!"
