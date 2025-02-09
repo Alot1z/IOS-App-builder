@@ -1,119 +1,88 @@
-name: Android Emulator Build
+name: iOS App Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "master" ]
     paths:
       - 'Apps/AndroidEmulator/**'
+      - '.github/workflows/android-emulator.yml'
   pull_request:
-    branches: [ main ]
+    branches: [ "master" ]
     paths:
       - 'Apps/AndroidEmulator/**'
+      - '.github/workflows/android-emulator.yml'
   workflow_dispatch:
 
 env:
-  JAVA_VERSION: '17'
-  GRADLE_VERSION: '8.5'
-  ANDROID_SDK_TOOLS_VERSION: '9477386'
-  ANDROID_PLATFORM_VERSION: '34'
-  ANDROID_BUILD_TOOLS_VERSION: '34.0.0'
-  ANDROID_NDK_VERSION: '26.1.10909125'
   CCACHE_DIR: ~/.ccache
 
 jobs:
   build:
-    name: Build Android Emulator
-    runs-on: ubuntu-latest
-    
+    name: Build iOS App
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: Apps/AndroidEmulator
+
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v3
+
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
       with:
-        fetch-depth: 1
-        
-    - name: Set up JDK
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: ${{ env.JAVA_VERSION }}
-        
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      with:
-        cmdline-tools-version: ${{ env.ANDROID_SDK_TOOLS_VERSION }}
-        
-    - name: Setup Gradle
-      uses: gradle/gradle-build-action@v2
-      with:
-        gradle-version: ${{ env.GRADLE_VERSION }}
-        cache-read-only: false
-        gradle-home-cache-cleanup: true
-        
-    - name: Setup ccache
-      uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        max-size: 2G
-        key: ${{ runner.os }}-ccache-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-ccache-
-          
-    - name: Cache Gradle and Build
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-          ~/.android/build-cache
-          Apps/AndroidEmulator/.gradle
-          Apps/AndroidEmulator/app/build
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-          
-    - name: Accept Android Licenses
-      run: yes | sdkmanager --licenses
-        
-    - name: Install Android Components
+        xcode-version: '15.2'
+
+    - name: Install Dependencies
       run: |
-        sdkmanager --install \
-          "platforms;android-${{ env.ANDROID_PLATFORM_VERSION }}" \
-          "build-tools;${{ env.ANDROID_BUILD_TOOLS_VERSION }}" \
-          "ndk;${{ env.ANDROID_NDK_VERSION }}"
-          
-    - name: Setup Build Environment
-      run: |
-        cd Apps/AndroidEmulator
-        chmod +x ./gradlew
-        # Configure ccache
-        export CCACHE_EXEC=$(which ccache)
-        export NDK_CCACHE=$CCACHE_EXEC
-        export USE_CCACHE=1
-        ccache -M 5G
-        ccache -o compression=true
-        ccache -o compression_level=9
+        brew install xcbeautify
         
-    - name: Build with Gradle
+    - name: Setup Provisioning Profile
+      env:
+        BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
       run: |
-        cd Apps/AndroidEmulator
-        ./gradlew assembleDebug \
-          --no-daemon \
-          --parallel \
-          --build-cache \
-          --configure-on-demand \
-          --max-workers=$(nproc) \
-          -Dorg.gradle.caching=true \
-          -Dorg.gradle.parallel=true \
-          -Dorg.gradle.configureondemand=true \
-          -Dorg.gradle.jvmargs="-Xmx4g -XX:+HeapDumpOnOutOfMemoryError" \
-          -Pandroid.useAndroidX=true \
-          -Pandroid.enableJetifier=true \
-          -Pandroid.enableR8.fullMode=true \
-          -Pandroid.enableD8.desugaring=true \
-          -Pandroid.enableBuildCache=true \
-          -Pandroid.enableProfileJson=true
+        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+        echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/build_pp.mobileprovision
+        
+    - name: Setup Code Signing
+      env:
+        BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      run: |
+        # Create variables
+        CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+        
+        # Import certificate from secrets
+        echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
+        
+        # Create temporary keychain
+        security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        
+        # Import certificate to keychain
+        security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+        security list-keychain -d user -s $KEYCHAIN_PATH
+        
+    - name: Build App
+      run: |
+        xcodebuild -project AndroidEmulator.xcodeproj \
+          -scheme AndroidEmulator \
+          -configuration Release \
+          -destination 'generic/platform=iOS' \
+          -archivePath build/AndroidEmulator.xcarchive \
+          clean archive | xcbeautify
           
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
+    - name: Create IPA
+      run: |
+        xcodebuild -exportArchive \
+          -archivePath build/AndroidEmulator.xcarchive \
+          -exportOptionsPlist ExportOptions.plist \
+          -exportPath build/Export | xcbeautify
+          
+    - name: Upload IPA
+      uses: actions/upload-artifact@v3
       with:
-        name: AndroidEmulator-debug
-        path: Apps/AndroidEmulator/app/build/outputs/apk/debug/app-debug.apk
+        name: AndroidEmulator
+        path: Apps/AndroidEmulator/build/Export/AndroidEmulator.ipa
