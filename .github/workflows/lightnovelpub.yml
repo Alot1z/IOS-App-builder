@@ -1,4 +1,4 @@
-name: 🚀 LightNovelPub Turbo Build
+name: 📱 LightNovelPub iOS Build
 
 on:
   push:
@@ -13,157 +13,69 @@ on:
 
 env:
   DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
-  CCACHE_DIR: ~/.ccache
-  FASTLANE_SKIP_UPDATE_CHECK: true
-  FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: 180
-  MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+  BUNDLE_ID: "com.alot1z.lightnovelpub"
+  APP_NAME: "LightNovel Pub"
+  MIN_IOS: "16.0"
+  MAX_IOS: "17.0"
 
 jobs:
-  turbo-build:
-    name: 🏎️ Turbo Build
+  build:
+    name: Build iOS App
     runs-on: macos-latest
-    env:
-      MINT_PATH: mint/lib
-      MINT_LINK_PATH: mint/bin
     
     steps:
-    - name: ⚡ Turbo Checkout
+    - name: Checkout Code
       uses: actions/checkout@v4
       with:
         fetch-depth: 1
-        lfs: true
     
-    # MAXIMUM CACHING
-    - name: 💾 Mega Cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/Library/Caches/org.swift.swiftpm
-          ~/Library/Caches/Homebrew
-          ~/Library/Caches/CocoaPods
-          ~/Library/Developer/Xcode/DerivedData
-          ~/.ccache
-          Apps/lightnovelpub/build
-          Apps/lightnovelpub/.build
-          Apps/lightnovelpub/icon-cache
-          mint
-        key: ${{ runner.os }}-turbo-${{ hashFiles('Apps/lightnovelpub/**') }}
-        restore-keys: |
-          ${{ runner.os }}-turbo-
-    
-    # TURBO SETUP
-    - name: 🚄 Turbo Setup
+    - name: Setup Xcode
       run: |
-        # Install optimized build tools
-        brew install ccache
-        brew install ninja
-        brew install fastlane
-        
-        # Setup ccache
-        ccache --max-size=50G
-        ccache --set-config=compression=true
-        ccache --set-config=compression_level=9
-        ccache --set-config=cache_dir=~/.ccache
-        
-        # Optimize Xcode
-        defaults write com.apple.dt.XCBuild EnableSwiftBuildSystemIntegration 1
-        defaults write com.apple.dt.Xcode BuildSystemScheduleInherentlyParallelCommandsSerially -bool NO
+        sudo xcode-select --switch /Applications/Xcode.app
         defaults write com.apple.dt.Xcode IDEBuildOperationMaxNumberOfConcurrentCompileTasks $(sysctl -n hw.ncpu)
-        
-        # Pre-heat Swift compiler
-        xcrun swift --version
     
-    # PARALLEL ICON GENERATION
-    - name: 🎨 Generate Icons
+    - name: Prepare Build
       run: |
         cd Apps/lightnovelpub
-        
-        # Use parallel processing for icons
-        parallel_icon_gen() {
-          size=$1
-          output=$2
-          sips -z $size $size "assets/Light_Novel_pub_Icon.png" --out "$output" &
-        }
-        
-        # Generate all sizes in parallel
         mkdir -p build/Assets.xcassets/AppIcon.appiconset
-        parallel_icon_gen 1024 "build/Assets.xcassets/AppIcon.appiconset/1024.png"
-        parallel_icon_gen 180 "build/Assets.xcassets/AppIcon.appiconset/180.png"
-        parallel_icon_gen 167 "build/Assets.xcassets/AppIcon.appiconset/167.png"
-        parallel_icon_gen 152 "build/Assets.xcassets/AppIcon.appiconset/152.png"
-        parallel_icon_gen 120 "build/Assets.xcassets/AppIcon.appiconset/120.png"
-        parallel_icon_gen 87 "build/Assets.xcassets/AppIcon.appiconset/87.png"
-        parallel_icon_gen 80 "build/Assets.xcassets/AppIcon.appiconset/80.png"
-        parallel_icon_gen 76 "build/Assets.xcassets/AppIcon.appiconset/76.png"
-        parallel_icon_gen 60 "build/Assets.xcassets/AppIcon.appiconset/60.png"
-        parallel_icon_gen 58 "build/Assets.xcassets/AppIcon.appiconset/58.png"
-        parallel_icon_gen 40 "build/Assets.xcassets/AppIcon.appiconset/40.png"
-        wait
+        cp assets/Light_Novel_pub_Icon.png build/Assets.xcassets/AppIcon.appiconset/icon.png
+        
+        # Create Contents.json
+        echo '{
+          "images": [{"filename": "icon.png", "idiom": "universal", "platform": "ios", "size": "1024x1024"}],
+          "info": {"version": 1, "author": "xcode"}
+        }' > build/Assets.xcassets/AppIcon.appiconset/Contents.json
+        
+        # Create Info.plist
+        echo '<?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+          <key>CFBundleIdentifier</key><string>'${BUNDLE_ID}'</string>
+          <key>CFBundleName</key><string>'${APP_NAME}'</string>
+          <key>CFBundleVersion</key><string>1.0.0</string>
+          <key>MinimumOSVersion</key><string>'${MIN_IOS}'</string>
+        </dict></plist>' > build/Info.plist
     
-    # TURBO BUILD
-    - name: 🏃 Turbo Build
-      env:
-        DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+    - name: Build App
       run: |
         cd Apps/lightnovelpub
-        
-        # Enable all optimizations
-        export SWIFT_COMPILATION_MODE=wholemodule
-        export SWIFT_OPTIMIZATION_LEVEL=-O
-        export SWIFT_WHOLE_MODULE_OPTIMIZATION=YES
-        export SWIFT_USE_PARALLEL_WHOLE_MODULE_OPTIMIZATION=YES
-        export SWIFT_PARALLEL_MODULE_JOBS=$(sysctl -n hw.ncpu)
-        export COMPILER_INDEX_STORE_ENABLE=NO
-        export CC="ccache clang"
-        export CXX="ccache clang++"
-        export CCACHE_CPP2=yes
-        export CCACHE_SLOPPINESS=file_macro,time_macros,locale,file_stat_matches
-        
-        # Run multiple tasks in parallel
-        {
-          # Build with maximum optimization
-          xcodebuild -scheme LightNovelPub \
-            -configuration Release \
-            -destination generic/platform=iOS \
-            -derivedDataPath build/DerivedData \
-            -parallelizeTargets \
-            -jobs $(sysctl -n hw.ncpu) \
-            ONLY_ACTIVE_ARCH=NO \
-            ENABLE_BITCODE=NO \
-            ENABLE_TESTABILITY=NO \
-            GCC_OPTIMIZATION_LEVEL=fast \
-            SWIFT_OPTIMIZATION_LEVEL=-O \
-            SWIFT_COMPILATION_MODE=wholemodule \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
-            SWIFT_WHOLE_MODULE_OPTIMIZATION=YES \
-            clean build
-            
-        } &> build.log
+        xcodebuild -scheme LightNovelPub \
+          -configuration Release \
+          -destination generic/platform=iOS \
+          ONLY_ACTIVE_ARCH=NO \
+          BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+          SWIFT_OPTIMIZATION_LEVEL=-O \
+          clean build
     
-    # PACKAGE IPA
-    - name: 📦 Create IPA
+    - name: Create IPA
       run: |
         cd Apps/lightnovelpub
-        
-        # Create IPA structure
         mkdir -p Payload/LightNovelPub.app
-        cp -r build/DerivedData/Build/Products/Release-iphoneos/* Payload/LightNovelPub.app/
-        
-        # Create optimized IPA
-        zip -9r LightNovelPub.ipa Payload
+        cp -r build/Release-iphoneos/* Payload/LightNovelPub.app/
+        zip -r LightNovelPub.ipa Payload
     
-    # UPLOAD
-    - name: ⬆️ Upload IPA
+    - name: Upload IPA
       uses: actions/upload-artifact@v4
       with:
         name: LightNovelPub-IPA
         path: Apps/lightnovelpub/LightNovelPub.ipa
-        retention-days: 5
-    
-    # CLEANUP
-    - name: 🧹 Cleanup
-      if: always()
-      run: |
-        cd Apps/lightnovelpub
-        rm -rf build/DerivedData
-        ccache --cleanup
