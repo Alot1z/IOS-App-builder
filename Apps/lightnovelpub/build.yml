@@ -1,18 +1,10 @@
-name: Build LightNovel Pub App
+name: Build iOS App
 
 on:
-  workflow_dispatch:
-    inputs:
-      ios_version:
-        description: 'iOS Target Version'
-        required: true
-        default: '17.0'
-        type: string
-      app_version:
-        description: 'App Version'
-        required: true
-        default: '1.0.0'
-        type: string
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 env:
   APP_DIR: Apps/lightnovelpub
@@ -21,25 +13,30 @@ env:
 
 jobs:
   build:
-    name: Build LightNovel Pub App
+    name: Build Release
     runs-on: macos-latest
     
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v2
       
-    - name: Setup Build Environment
+    - name: Setup Build Tools
       run: |
-        sudo xcode-select --switch /Applications/Xcode.app
-        brew install ldid imagemagick swift || true
-        
-    - name: Build App
+        brew install imagemagick
+        sudo xcode-select -s /Applications/Xcode.app
+          
+    - name: Generate App Icons
       run: |
-        cd ${{ env.APP_DIR }}
-        chmod +x ./scripts/build.sh
+        cd Apps/lightnovelpub
+        chmod +x scripts/generate_icons.sh
+        ./scripts/generate_icons.sh assets/icon.png
+          
+    - name: Build iOS App
+      run: |
+        cd Apps/lightnovelpub
+        chmod +x scripts/build.sh
         ./scripts/build.sh \
-          --ios-version ${{ github.event.inputs.ios_version }} \
-          --app-version ${{ github.event.inputs.app_version }} \
+          --ios-version 17.0 \
+          --app-version 1.0.0 \
           --min-ios-version 16.0 \
           --max-ios-version 17.0 \
           --optimization-level 3 \
@@ -51,7 +48,7 @@ jobs:
           --dependencies WebKit,SafariServices,UserNotifications,SwiftUI
         
     - name: Upload IPA
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v2
       with:
-        name: LightNovelPub
-        path: ${{ env.APP_DIR }}/build/LightNovelPub.ipa
+        name: LightNovelPub.ipa
+        path: Apps/lightnovelpub/build/LightNovelPub.ipa

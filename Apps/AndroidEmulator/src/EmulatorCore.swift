@@ -3,24 +3,44 @@ import Metal
 import MetalKit
 import AVFoundation
 import UniformTypeIdentifiers
+import VideoToolbox
 
 class EmulatorCore {
+    // Metal components
     private var metalDevice: MTLDevice?
     private var commandQueue: MTLCommandQueue?
     private var renderPipelineState: MTLRenderPipelineState?
     private var vertexBuffer: MTLBuffer?
+    private var textureCache: CVMetalTextureCache?
     
-    // Android x86 emulation components
+    // Hardware acceleration
+    private var hwAccel: HardwareAcceleration
+    private var gpuEncoder: GPUEncoder
+    private var videoDecoder: VideoDecoder
+    
+    // Android components
     private var cpuEmulator: CPUEmulator
     private var memoryManager: MemoryManager
     private var graphicsRenderer: GraphicsRenderer
     private var androidSystem: AndroidSystem
     private var apkManager: APKManager
     
+    // LDPlayer specific
+    private var virtualGPU: VirtualGPU
+    private var audioEngine: AudioEngine
+    private var networkStack: NetworkStack
+    private var inputManager: InputManager
+    private var multiInstance: MultiInstanceManager
+    
     init() {
         // Initialize Metal
         metalDevice = MTLCreateSystemDefaultDevice()
         commandQueue = metalDevice?.makeCommandQueue()
+        
+        // Initialize hardware acceleration
+        hwAccel = HardwareAcceleration(device: metalDevice)
+        gpuEncoder = GPUEncoder(device: metalDevice)
+        videoDecoder = VideoDecoder()
         
         // Initialize emulation components
         cpuEmulator = CPUEmulator()
@@ -29,11 +49,24 @@ class EmulatorCore {
         androidSystem = AndroidSystem()
         apkManager = APKManager()
         
+        // Initialize LDPlayer components
+        virtualGPU = VirtualGPU(device: metalDevice)
+        audioEngine = AudioEngine()
+        networkStack = NetworkStack()
+        inputManager = InputManager()
+        multiInstance = MultiInstanceManager()
+        
         setupMetal()
+        setupHardwareAcceleration()
     }
     
     private func setupMetal() {
         guard let device = metalDevice else { return }
+        
+        // Create texture cache
+        var textureCache: CVMetalTextureCache?
+        CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &textureCache)
+        self.textureCache = textureCache
         
         // Create render pipeline
         let library = device.makeDefaultLibrary()
@@ -52,6 +85,16 @@ class EmulatorCore {
         }
     }
     
+    private func setupHardwareAcceleration() {
+        // Setup hardware acceleration components
+        hwAccel.setupAcceleration()
+        gpuEncoder.setupEncoder()
+        videoDecoder.setupDecoder()
+        
+        // Setup virtual GPU for Android graphics
+        virtualGPU.setupVirtualGPU()
+    }
+    
     func startEmulation() {
         // Load Android x86 kernel
         if let kernelURL = Bundle.main.url(forResource: "kernel", withExtension: "bin") {
@@ -66,6 +109,17 @@ class EmulatorCore {
         // Initialize Android system
         androidSystem.initialize()
         
+        // Start hardware acceleration
+        hwAccel.start()
+        gpuEncoder.start()
+        videoDecoder.start()
+        
+        // Start LDPlayer components
+        virtualGPU.start()
+        audioEngine.start()
+        networkStack.start()
+        inputManager.start()
+        
         // Start CPU emulation
         cpuEmulator.start()
         
@@ -74,28 +128,264 @@ class EmulatorCore {
     }
     
     func installAPK(url: URL) {
-        apkManager.installAPK(url: url) { success, error in
+        apkManager.installAPK(url: url) { [weak self] success, error in
             if success {
                 print("APK installed successfully")
-                // Launch the installed app
-                androidSystem.launchLastInstalledApp()
+                // Launch the installed app with hardware acceleration
+                self?.androidSystem.launchLastInstalledApp()
+                self?.hwAccel.optimizeForApp()
             } else if let error = error {
                 print("Failed to install APK: \(error)")
             }
         }
     }
     
+    // LDPlayer specific functions
+    func createNewInstance(name: String, androidVersion: String) {
+        multiInstance.createInstance(name: name, androidVersion: androidVersion)
+    }
+    
+    func setPerformanceMode(_ mode: PerformanceMode) {
+        hwAccel.setPerformanceMode(mode)
+        virtualGPU.setPerformanceMode(mode)
+        cpuEmulator.setPerformanceMode(mode)
+    }
+    
+    func setResolution(_ resolution: Resolution) {
+        graphicsRenderer.setResolution(resolution)
+        virtualGPU.setResolution(resolution)
+    }
+    
+    func setFPS(_ fps: Int) {
+        graphicsRenderer.setFPS(fps)
+        virtualGPU.setFPS(fps)
+    }
+    
+    func mapKeyboardControls(_ controls: [KeyMapping]) {
+        inputManager.mapKeyboardControls(controls)
+    }
+    
     func pauseEmulation() {
         cpuEmulator.pause()
         graphicsRenderer.pauseRendering()
         androidSystem.pause()
+        hwAccel.pause()
+        virtualGPU.pause()
+        audioEngine.pause()
+        networkStack.pause()
     }
     
     func resumeEmulation() {
         cpuEmulator.resume()
         graphicsRenderer.resumeRendering()
         androidSystem.resume()
+        hwAccel.resume()
+        virtualGPU.resume()
+        audioEngine.resume()
+        networkStack.resume()
     }
+}
+
+// Hardware Acceleration
+class HardwareAcceleration {
+    private let device: MTLDevice?
+    private var accelerator: MTLAccelerationStructure?
+    
+    init(device: MTLDevice?) {
+        self.device = device
+    }
+    
+    func setupAcceleration() {
+        // Setup Metal acceleration structures
+    }
+    
+    func start() {
+        // Start hardware acceleration
+    }
+    
+    func optimizeForApp() {
+        // Optimize acceleration for current app
+    }
+    
+    func setPerformanceMode(_ mode: PerformanceMode) {
+        // Adjust acceleration based on performance mode
+    }
+    
+    func pause() {
+        // Pause acceleration
+    }
+    
+    func resume() {
+        // Resume acceleration
+    }
+}
+
+// GPU Encoding
+class GPUEncoder {
+    private let device: MTLDevice?
+    private var encoder: MTLComputeCommandEncoder?
+    
+    init(device: MTLDevice?) {
+        self.device = device
+    }
+    
+    func setupEncoder() {
+        // Setup Metal compute encoder
+    }
+    
+    func start() {
+        // Start GPU encoding
+    }
+}
+
+// Video Decoding
+class VideoDecoder {
+    private var decompressionSession: VTDecompressionSession?
+    
+    func setupDecoder() {
+        // Setup VideoToolbox decompression
+    }
+    
+    func start() {
+        // Start video decoding
+    }
+}
+
+// Virtual GPU for Android
+class VirtualGPU {
+    private let device: MTLDevice?
+    private var virtualGPUState: VirtualGPUState = .stopped
+    
+    init(device: MTLDevice?) {
+        self.device = device
+    }
+    
+    func setupVirtualGPU() {
+        // Setup virtual GPU components
+    }
+    
+    func start() {
+        virtualGPUState = .running
+    }
+    
+    func setPerformanceMode(_ mode: PerformanceMode) {
+        // Adjust virtual GPU based on performance mode
+    }
+    
+    func setResolution(_ resolution: Resolution) {
+        // Update virtual GPU resolution
+    }
+    
+    func setFPS(_ fps: Int) {
+        // Update virtual GPU frame rate
+    }
+    
+    func pause() {
+        virtualGPUState = .paused
+    }
+    
+    func resume() {
+        virtualGPUState = .running
+    }
+}
+
+// Audio Engine
+class AudioEngine {
+    private var audioEngine: AVAudioEngine
+    
+    init() {
+        audioEngine = AVAudioEngine()
+    }
+    
+    func start() {
+        // Start audio processing
+    }
+    
+    func pause() {
+        audioEngine.pause()
+    }
+    
+    func resume() {
+        try? audioEngine.start()
+    }
+}
+
+// Network Stack
+class NetworkStack {
+    private var networkState: NetworkState = .disconnected
+    
+    func start() {
+        // Initialize network stack
+    }
+    
+    func pause() {
+        networkState = .paused
+    }
+    
+    func resume() {
+        networkState = .connected
+    }
+}
+
+// Input Management
+class InputManager {
+    private var keyMappings: [KeyMapping] = []
+    
+    func mapKeyboardControls(_ controls: [KeyMapping]) {
+        keyMappings = controls
+    }
+}
+
+// Multi-Instance Management
+class MultiInstanceManager {
+    private var instances: [EmulatorInstance] = []
+    
+    func createInstance(name: String, androidVersion: String) {
+        let instance = EmulatorInstance(name: name, androidVersion: androidVersion)
+        instances.append(instance)
+    }
+}
+
+// Supporting Types
+enum PerformanceMode {
+    case balanced
+    case highPerformance
+    case powerSaving
+}
+
+struct Resolution {
+    let width: Int
+    let height: Int
+    let scale: Float
+}
+
+struct KeyMapping {
+    let keyCode: UInt16
+    let androidKeyCode: Int32
+}
+
+enum VirtualGPUState {
+    case running
+    case paused
+    case stopped
+}
+
+enum NetworkState {
+    case connected
+    case disconnected
+    case paused
+}
+
+struct EmulatorInstance {
+    let name: String
+    let androidVersion: String
+    var state: InstanceState = .stopped
+}
+
+enum InstanceState {
+    case running
+    case paused
+    case stopped
 }
 
 // CPU Emulation
@@ -133,6 +423,10 @@ class CPUEmulator {
         while isRunning {
             x86Emulator.executeNextInstruction()
         }
+    }
+    
+    func setPerformanceMode(_ mode: PerformanceMode) {
+        // Adjust CPU emulation based on performance mode
     }
 }
 
@@ -467,5 +761,13 @@ class GraphicsRenderer {
                 commandBuffer.commit()
             }
         }
+    }
+    
+    func setResolution(_ resolution: Resolution) {
+        // Update graphics resolution
+    }
+    
+    func setFPS(_ fps: Int) {
+        // Update graphics frame rate
     }
 }
