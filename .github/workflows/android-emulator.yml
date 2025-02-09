@@ -20,6 +20,11 @@ permissions:
 env:
   DEVELOPER_DIR: /Applications/Xcode_15.4.app/Contents/Developer
   SDKROOT: /Applications/Xcode_15.4.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS17.5.sdk
+  ANDROID_NDK_VERSION: 25.2.9519653
+  ANDROID_BUILD_TOOLS_VERSION: 33.0.2
+  ANDROID_SDK_TOOLS_VERSION: 9477386
+  ANDROID_PLATFORM_VERSION: 33
+  JAVA_VERSION: 17
 
 jobs:
   build-emulator:
@@ -27,27 +32,26 @@ jobs:
     runs-on: macos-latest
     
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
         lfs: true
-    
-    - name: Setup Xcode
-      uses: apple-actions/setup-xcode@v3
-      with:
-        xcode-version: '15.4'
     
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '17'
+        java-version: ${{ env.JAVA_VERSION }}
+        cache: 'gradle'
     
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        api-level: 33
-        build-tools-version: 33.0.0
+        api-level: ${{ env.ANDROID_PLATFORM_VERSION }}
+        build-tools-version: ${{ env.ANDROID_BUILD_TOOLS_VERSION }}
+        cmdline-tools-version: ${{ env.ANDROID_SDK_TOOLS_VERSION }}
+        ndk-version: ${{ env.ANDROID_NDK_VERSION }}
     
     - name: Cache Dependencies
       uses: actions/cache@v4
@@ -56,6 +60,8 @@ jobs:
           ~/.gradle/caches
           ~/.gradle/wrapper
           ~/Library/Caches/CocoaPods
+          ~/.android/avd/*
+          ~/.android/adb*
         key: ${{ runner.os }}-deps-${{ hashFiles('**/*.gradle*', '**/Podfile.lock') }}
         restore-keys: |
           ${{ runner.os }}-deps-
@@ -64,11 +70,44 @@ jobs:
       run: |
         brew install imagemagick
         brew install swiftlint
-        brew install create-dmg
         brew install qemu
         brew install mesa
         brew install portaudio
         brew install libpcap
+        
+        # Install Android SDK components
+        sdkmanager --install \
+          "platform-tools" \
+          "emulator" \
+          "system-images;android-${{ env.ANDROID_PLATFORM_VERSION }};google_apis;arm64-v8a"
+        
+        # Accept licenses
+        yes | sdkmanager --licenses
+    
+    - name: Create Android Virtual Device
+      run: |
+        echo "Creating AVD..."
+        echo "no" | avdmanager create avd \
+          --name test_avd \
+          --package "system-images;android-${{ env.ANDROID_PLATFORM_VERSION }};google_apis;arm64-v8a" \
+          --device "pixel_6"
+    
+    - name: Start Android Emulator
+      run: |
+        echo "Starting emulator..."
+        nohup $ANDROID_HOME/emulator/emulator \
+          -avd test_avd \
+          -no-window \
+          -gpu swiftshader_indirect \
+          -no-snapshot \
+          -no-audio \
+          -no-boot-anim \
+          -camera-back none \
+          -camera-front none \
+          -qemu -cpu cortex-a57 &
+        
+        echo "Waiting for emulator to start..."
+        $ANDROID_HOME/platform-tools/adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
     
     - name: Setup Build Environment
       run: |
@@ -83,56 +122,85 @@ jobs:
     
     - name: Build Core Components
       id: build-core
-      continue-on-error: true
       run: |
         cd Apps/AndroidEmulator/src/core
-        make -f Makefile.cpu
-        make -f Makefile.gpu
-        make -f Makefile.audio
-        make -f Makefile.network
+        
+        # Build CPU emulator with Android NDK
+        $ANDROID_NDK_HOME/ndk-build \
+          APP_ABI=arm64-v8a \
+          APP_PLATFORM=android-${{ env.ANDROID_PLATFORM_VERSION }} \
+          NDK_PROJECT_PATH=. \
+          -j$(nproc)
+        
+        # Build GPU emulator
+        cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+              -DANDROID_ABI=arm64-v8a \
+              -DANDROID_PLATFORM=android-${{ env.ANDROID_PLATFORM_VERSION }} \
+              -B build/gpu
+        cmake --build build/gpu --config Release
+        
+        # Build audio subsystem
+        cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+              -DANDROID_ABI=arm64-v8a \
+              -DANDROID_PLATFORM=android-${{ env.ANDROID_PLATFORM_VERSION }} \
+              -B build/audio
+        cmake --build build/audio --config Release
+        
+        # Build network stack
+        cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+              -DANDROID_ABI=arm64-v8a \
+              -DANDROID_PLATFORM=android-${{ env.ANDROID_PLATFORM_VERSION }} \
+              -B build/network
+        cmake --build build/network --config Release
     
     - name: Build Swift Components
       id: build-swift
-      if: steps.build-core.outcome == 'success'
+      if: success()
       run: |
         cd Apps/AndroidEmulator
+        
+        # Build Swift wrapper with Android support
         swiftc -sdk $SDKROOT \
-          -target arm64-apple-ios16.0 \
+          -target aarch64-unknown-linux-android \
           -O \
-          -framework Metal \
-          -framework MetalKit \
-          -framework AVFoundation \
-          -framework CoreAudio \
-          -framework Network \
+          -I$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include \
+          -L$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib \
           src/*.swift \
           -o build/release/AndroidEmulator
     
-    - name: Run Tests
-      if: steps.build-swift.outcome == 'success'
+    - name: Run Tests on Emulator
+      if: success()
       run: |
         cd Apps/AndroidEmulator
-        ./tests/test_cpu.sh
-        ./tests/test_gpu.sh
-        ./tests/test_audio.sh
-        ./tests/test_network.sh
-        ./tests/test_integration.sh
+        
+        # Push test binary to emulator
+        adb push build/release/AndroidEmulator /data/local/tmp/
+        adb shell chmod 755 /data/local/tmp/AndroidEmulator
+        
+        # Run tests
+        adb shell /data/local/tmp/AndroidEmulator --test
     
     - name: Package App
       if: success()
       run: |
         cd Apps/AndroidEmulator
-        mkdir -p build/AndroidEmulator.app
-        cp -r build/release/AndroidEmulator build/AndroidEmulator.app/
-        cp -r resources/* build/AndroidEmulator.app/
-        mkdir -p build/AndroidEmulator.app/Components
-        cp build/core/cpu/libemulator-cpu.dylib build/AndroidEmulator.app/Components/
-        cp build/core/gpu/libemulator-gpu.dylib build/AndroidEmulator.app/Components/
-        cp build/core/audio/libemulator-audio.dylib build/AndroidEmulator.app/Components/
-        cp build/core/network/libemulator-network.dylib build/AndroidEmulator.app/Components/
-        cd build
-        mkdir -p Payload
-        cp -r AndroidEmulator.app Payload/
-        zip -r AndroidEmulator.ipa Payload
+        
+        # Create APK structure
+        mkdir -p build/apk
+        cp -r build/release/* build/apk/
+        cp -r resources/* build/apk/
+        
+        # Package using Android Build Tools
+        $ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS_VERSION }}/aapt2 compile \
+          --dir build/apk \
+          -o build/compiled.apk
+        
+        # Sign APK
+        $ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS_VERSION }}/apksigner sign \
+          --ks ~/.android/debug.keystore \
+          --ks-pass pass:android \
+          --key-pass pass:android \
+          build/compiled.apk
     
     - name: Upload Build Artifacts
       if: success()
@@ -140,18 +208,16 @@ jobs:
       with:
         name: AndroidEmulator
         path: |
-          Apps/AndroidEmulator/build/AndroidEmulator.ipa
+          Apps/AndroidEmulator/build/compiled.apk
           Apps/AndroidEmulator/build/debug-symbols/
           Apps/AndroidEmulator/build/logs/
-          Apps/AndroidEmulator/build/test-results/
         retention-days: 5
     
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          Apps/AndroidEmulator/build/AndroidEmulator.ipa
+        files: Apps/AndroidEmulator/build/compiled.apk
         name: Android Emulator Release ${{ github.ref_name }}
         body_path: Apps/AndroidEmulator/CHANGELOG.md
         draft: false
@@ -159,9 +225,14 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
+    - name: Stop Emulator
+      if: always()
+      run: |
+        adb emu kill
+    
     - name: Cleanup
       if: always()
       run: |
         cd Apps/AndroidEmulator
         rm -rf build/DerivedData
-        rm -rf build/Intermediates.noindex
+        rm -rf ~/.android/avd/test_avd.avd
