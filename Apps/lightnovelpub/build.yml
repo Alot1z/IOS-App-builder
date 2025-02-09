@@ -1,0 +1,57 @@
+name: Build LightNovel Pub App
+
+on:
+  workflow_dispatch:
+    inputs:
+      ios_version:
+        description: 'iOS Target Version'
+        required: true
+        default: '17.0'
+        type: string
+      app_version:
+        description: 'App Version'
+        required: true
+        default: '1.0.0'
+        type: string
+
+env:
+  APP_DIR: Apps/lightnovelpub
+  APP_NAME: "LightNovel Pub"
+  BUNDLE_ID: "com.alot1z.lightnovelpub"
+
+jobs:
+  build:
+    name: Build LightNovel Pub App
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: Setup Build Environment
+      run: |
+        sudo xcode-select --switch /Applications/Xcode.app
+        brew install ldid imagemagick swift || true
+        
+    - name: Build App
+      run: |
+        cd ${{ env.APP_DIR }}
+        chmod +x ./scripts/build.sh
+        ./scripts/build.sh \
+          --ios-version ${{ github.event.inputs.ios_version }} \
+          --app-version ${{ github.event.inputs.app_version }} \
+          --min-ios-version 16.0 \
+          --max-ios-version 17.0 \
+          --optimization-level 3 \
+          --enable-bitcode false \
+          --enable-arc true \
+          --deployment-target 16.0 \
+          --entitlements com.apple.security.network.client,com.apple.security.network.server,com.apple.private.security.no-container,com.apple.developer.usernotifications.time-sensitive,com.apple.developer.default-data-protection \
+          --features reader_mode,offline_storage,chapter_download,push_notifications,dark_mode,custom_themes,ios17_features \
+          --dependencies WebKit,SafariServices,UserNotifications,SwiftUI
+        
+    - name: Upload IPA
+      uses: actions/upload-artifact@v3
+      with:
+        name: LightNovelPub
+        path: ${{ env.APP_DIR }}/build/LightNovelPub.ipa

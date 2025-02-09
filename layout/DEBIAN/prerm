@@ -1,9 +1,0 @@
-#!/bin/sh
-
-# Remove preferences
-rm -f /var/mobile/Library/Preferences/com.alot1z.trollstore.enhanced.plist
-
-# Kill preferences daemon
-killall -9 cfprefsd
-
-exit 0

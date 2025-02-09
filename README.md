@@ -312,6 +312,29 @@ Core System
 iOS System Integration
 ```
 
+## Project Structure
+
+```
+.
+├── .github/
+│   └── workflows/          # GitHub Actions workflows
+│       └── app_builder.yml # Main build workflow
+│
+├── Apps/                   # Individual apps
+│   ├── lightnovelpub/     # LightNovel Pub app
+│   │   ├── build.yml      # App-specific workflow
+│   │   ├── scripts/       # Build scripts
+│   │   └── src/          # Source code
+│   │
+│   └── trollstore/        # TrollStore app and utilities
+│       └── ...
+│
+└── tools/                 # Shared build tools
+    ├── bin/              # Binary executables
+    ├── scripts/          # Shared build scripts
+    └── config/           # Tool configurations
+```
+
 ## Technical Specifications
 
 ### System Requirements
@@ -465,35 +488,6 @@ TSEntitlementManager *entManager = [TSEntitlementManager sharedInstance];
     @"com.apple.private.security.no-sandbox": @YES,
     @"platform-application": @YES
 } forBinaryAtPath:@"/path/to/binary"];
-```
-
-## Project Structure
-
-This enhanced version of TrollStore includes:
-
-- `TrollStore/` - Original TrollStore
-- `bins/` - Enhanced build tools and utilities
-- `extensions/` - Additional features and improvements
-- Separate installation guides for different scenarios
-
-## Build Configuration
-
-### Requirements
-- macOS/Linux build system
-- Theos installed
-- iOS SDK 16.2+
-- ldid utility
-- libarchive
-
-### Build Process
-```bash
-# Set environment
-export THEOS=/opt/theos
-export SDKVERSION=16.2
-export SYSROOT=/opt/theos/sdks/iPhoneOS16.2.sdk
-
-# Build package
-make package FINALPACKAGE=1
 ```
 
 ## Development Guide
@@ -661,7 +655,7 @@ For troubleshooting and recovery:
 | `TROLLSTORE_ROLLBACK` | Allow version rollback | 0 | ✓ |
 | `TROLLSTORE_HEALTH_CHECK` | System health monitoring | 1 | ✓ |
 
-### Variable Inheritance
+## Variable Inheritance
 
 Variables can inherit from multiple categories:
 

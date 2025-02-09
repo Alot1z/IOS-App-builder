@@ -1,0 +1,99 @@
+name: Build LightNovel Pub App
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Apps/lightnovelpub/**'
+      - '.github/workflows/lightnovelpub.yml'
+      - 'tools/root/**'
+      - 'Exploits/**'
+
+env:
+  APP_NAME: LightNovel Pub
+  BUNDLE_ID: com.alot1z.lightnovelpub
+  MIN_IOS: "16.0"
+  MAX_IOS: "17.0"
+  TEAM_ID: "ALOT1Z"
+
+jobs:
+  build:
+    name: Build iOS App
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: Setup Build Environment
+      run: |
+        sudo xcode-select --switch /Applications/Xcode.app
+        brew install ldid imagemagick swift || true
+        
+    - name: Setup Root Components
+      run: |
+        # Copy root helper
+        mkdir -p Apps/lightnovelpub/src/root
+        cp tools/root/giveMeRoot.m Apps/lightnovelpub/src/root/
+        
+        # Copy exploit files
+        mkdir -p Apps/lightnovelpub/src/exploits
+        cp -r Exploits/CVE_2023_42824/* Apps/lightnovelpub/src/exploits/
+        
+        # Merge entitlements
+        cat tools/root/root_entitlements.plist > Apps/lightnovelpub/entitlements.plist
+        
+    - name: Build Release
+      run: |
+        cd Apps/lightnovelpub
+        chmod +x scripts/*.sh
+        
+        # Generate icons
+        ./scripts/generate_icons.sh \
+          --input resources/icon.png \
+          --output build/
+        
+        # Create Info.plist
+        ./scripts/create_plist.sh \
+          --bundle-id "${{ env.BUNDLE_ID }}" \
+          --app-name "${{ env.APP_NAME }}" \
+          --app-version "1.0.0" \
+          --min-ios-version "${{ env.MIN_IOS }}" \
+          --max-ios-version "${{ env.MAX_IOS }}" \
+          --output build/Info.plist
+        
+        # Build app with root and exploit integration
+        ./scripts/build.sh \
+          --ios-version "${{ env.MAX_IOS }}" \
+          --app-version "1.0.0" \
+          --min-ios-version "${{ env.MIN_IOS }}" \
+          --max-ios-version "${{ env.MAX_IOS }}" \
+          --optimization-level 3 \
+          --enable-bitcode false \
+          --enable-arc true \
+          --deployment-target "${{ env.MIN_IOS }}" \
+          --build-type release \
+          --root-enabled true \
+          --exploit-enabled true
+        
+        # Sign with entitlements
+        ./scripts/sign_app.sh \
+          --app "build/${{ env.APP_NAME }}.app" \
+          --entitlements entitlements.plist
+        
+    - name: Package IPA
+      run: |
+        cd Apps/lightnovelpub/build
+        mkdir -p Payload
+        cp -r "${{ env.APP_NAME }}.app" Payload/
+        zip -r "${{ env.APP_NAME }}.ipa" Payload
+        rm -rf Payload
+        
+    - name: Upload Release IPA
+      uses: actions/upload-artifact@v3
+      with:
+        name: LightNovelPub-Release
+        path: |
+          Apps/lightnovelpub/build/*.ipa
+          Apps/lightnovelpub/build/logs/
+          Apps/lightnovelpub/build/debug-symbols/
