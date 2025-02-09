@@ -61,67 +61,28 @@ for dir in "$BUILD_DIR" "$DERIVED_DATA_DIR" "$INTERMEDIATE_DIR" "$PRODUCTS_DIR" 
     echo "Created directory: $dir"
 done
 
-# Set up compilation flags
-SWIFT_FLAGS=(
-    "-target" "arm64-apple-ios${deployment_target}"
-    "-sdk" "$SDKROOT"
-    "-O${optimization_level:-0}"
-    "-g"  # Include debug symbols
-    "-swift-version" "5"
-    "-module-name" "LightNovelPub"
+# Set Swift build flags
+SWIFT_BUILD_FLAGS=(
+    "--configuration" "release"
+    "--arch" "arm64"
+    "--sdk" "$SDKROOT"
+    "--package-path" "."
 )
-
-if [ "$enable_arc" = "true" ]; then
-    SWIFT_FLAGS+=("-enable-objc-arc")
-fi
 
 if [ "$build_type" = "release" ]; then
-    SWIFT_FLAGS+=("-whole-module-optimization")
+    SWIFT_BUILD_FLAGS+=("-Xswiftc" "-O")
 fi
 
-# Add frameworks
-FRAMEWORKS=(
-    "-framework" "UIKit"
-    "-framework" "WebKit"
-    "-framework" "SafariServices"
-    "-framework" "UserNotifications"
-    "-framework" "SwiftUI"
-)
-
-# Initialize Package.swift if it doesn't exist
-if [ ! -f "Package.swift" ]; then
-    echo "Creating Package.swift..."
-    cat > Package.swift << EOF
-// swift-tools-version:5.5
-import PackageDescription
-
-let package = Package(
-    name: "LightNovelPub",
-    platforms: [
-        .iOS(.v${min_ios_version})
-    ],
-    products: [
-        .executable(name: "LightNovelPub", targets: ["LightNovelPub"])
-    ],
-    targets: [
-        .target(
-            name: "LightNovelPub",
-            path: "src"
-        )
-    ]
-)
-EOF
+if [ "$enable_arc" = "true" ]; then
+    SWIFT_BUILD_FLAGS+=("-Xswiftc" "-enable-objc-arc")
 fi
 
 # Compile Swift files
 echo "Compiling Swift files..."
-swift build \
-    --configuration release \
-    --build-path "$BUILD_DIR" \
-    --sdk "$SDKROOT" \
-    --target "arm64-apple-ios${deployment_target}" \
-    ${SWIFT_FLAGS[@]} \
-    ${FRAMEWORKS[@]} 2>&1 | tee "$LOGS_DIR/build.log"
+mkdir -p "$BUILD_DIR/release"
+
+# Build using Swift Package Manager
+swift build "${SWIFT_BUILD_FLAGS[@]}" 2>&1 | tee "$LOGS_DIR/build.log"
 
 if [ ${PIPESTATUS[0]} -ne 0 ]; then
     echo "Error: Swift build failed. Check $LOGS_DIR/build.log for details."
@@ -151,7 +112,7 @@ if [ -f "build/Info.plist" ]; then
 fi
 
 # Copy binary
-BINARY_PATH="$BUILD_DIR/release/LightNovelPub"
+BINARY_PATH=".build/release/LightNovelPub"
 if [ -f "$BINARY_PATH" ]; then
     cp "$BINARY_PATH" "$APP_BUNDLE_DIR/" || {
         echo "Error: Failed to copy binary"
@@ -184,8 +145,8 @@ if [ "$exploit_enabled" = "true" ]; then
 fi
 
 # Copy debug symbols
-if [ -d "$BUILD_DIR/release" ]; then
-    cp -R "$BUILD_DIR/release"/*.dSYM "$DEBUG_SYMBOLS_DIR/" 2>/dev/null || true
+if [ -d ".build/release" ]; then
+    cp -R .build/release/*.dSYM "$DEBUG_SYMBOLS_DIR/" 2>/dev/null || true
 fi
 
 echo "Build completed successfully!"

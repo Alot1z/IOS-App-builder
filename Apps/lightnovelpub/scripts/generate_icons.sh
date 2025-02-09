@@ -1,102 +1,161 @@
 #!/bin/bash
 
-# Icon generation script for LightNovel Pub iOS app
-# Supports iOS 16.0-17.0 icon requirements
-
 set -e
 
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        --input) INPUT_ICON="$2"; shift ;;
-        --output) OUTPUT_DIR="$2"; shift ;;
+        --input) input="$2"; shift ;;
+        --output) output="$2"; shift ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
     shift
 done
 
 # Validate input
-if [ ! -f "$INPUT_ICON" ]; then
-    echo "Error: Input icon file not found: $INPUT_ICON"
+if [ -z "$input" ] || [ -z "$output" ]; then
+    echo "Usage: $0 --input <input_icon.png> --output <output_dir>"
     exit 1
 fi
 
-if [ ! -d "$OUTPUT_DIR" ]; then
-    echo "Error: Output directory not found: $OUTPUT_DIR"
-    exit 1
-fi
+# Create output directory
+mkdir -p "$output"
 
-# Create Assets.xcassets structure
-ASSETS_DIR="$OUTPUT_DIR/Assets.xcassets/AppIcon.appiconset"
-mkdir -p "$ASSETS_DIR"
-
-# Define icon sizes for iOS 16-17
-declare -A ICON_SIZES=(
-    ["20x20"]="40 60"           # Notification
-    ["29x29"]="58 87"           # Settings
-    ["40x40"]="80 120"          # Spotlight
-    ["60x60"]="120 180"         # iPhone App
-    ["76x76"]="152 228"         # iPad App
-    ["83.5x83.5"]="167"         # iPad Pro App
-    ["1024x1024"]="1024"        # App Store
+# iOS icon sizes
+declare -a sizes=(
+    "20x20"
+    "29x29"
+    "40x40"
+    "58x58"
+    "60x60"
+    "76x76"
+    "80x80"
+    "87x87"
+    "120x120"
+    "152x152"
+    "167x167"
+    "180x180"
+    "1024x1024"
 )
 
-# Generate Contents.json
-cat > "$ASSETS_DIR/Contents.json" << EOF
+# Generate icons for each size
+for size in "${sizes[@]}"; do
+    width=${size%x*}
+    height=${size#*x}
+    echo "Generating ${size} icon..."
+    convert "$input" -resize "${width}x${height}!" "$output/icon_${size}.png"
+done
+
+# Create Contents.json
+cat > "$output/Contents.json" << EOF
 {
   "images" : [
     {
       "size" : "20x20",
       "idiom" : "iphone",
-      "filename" : "Icon-40.png",
+      "filename" : "icon_40x40.png",
       "scale" : "2x"
     },
     {
       "size" : "20x20",
       "idiom" : "iphone",
-      "filename" : "Icon-60.png",
+      "filename" : "icon_60x60.png",
       "scale" : "3x"
     },
     {
       "size" : "29x29",
       "idiom" : "iphone",
-      "filename" : "Icon-58.png",
+      "filename" : "icon_58x58.png",
       "scale" : "2x"
     },
     {
       "size" : "29x29",
       "idiom" : "iphone",
-      "filename" : "Icon-87.png",
+      "filename" : "icon_87x87.png",
       "scale" : "3x"
     },
     {
       "size" : "40x40",
       "idiom" : "iphone",
-      "filename" : "Icon-80.png",
+      "filename" : "icon_80x80.png",
       "scale" : "2x"
     },
     {
       "size" : "40x40",
       "idiom" : "iphone",
-      "filename" : "Icon-120.png",
+      "filename" : "icon_120x120.png",
       "scale" : "3x"
     },
     {
       "size" : "60x60",
       "idiom" : "iphone",
-      "filename" : "Icon-120.png",
+      "filename" : "icon_120x120.png",
       "scale" : "2x"
     },
     {
       "size" : "60x60",
       "idiom" : "iphone",
-      "filename" : "Icon-180.png",
+      "filename" : "icon_180x180.png",
       "scale" : "3x"
+    },
+    {
+      "size" : "20x20",
+      "idiom" : "ipad",
+      "filename" : "icon_20x20.png",
+      "scale" : "1x"
+    },
+    {
+      "size" : "20x20",
+      "idiom" : "ipad",
+      "filename" : "icon_40x40.png",
+      "scale" : "2x"
+    },
+    {
+      "size" : "29x29",
+      "idiom" : "ipad",
+      "filename" : "icon_29x29.png",
+      "scale" : "1x"
+    },
+    {
+      "size" : "29x29",
+      "idiom" : "ipad",
+      "filename" : "icon_58x58.png",
+      "scale" : "2x"
+    },
+    {
+      "size" : "40x40",
+      "idiom" : "ipad",
+      "filename" : "icon_40x40.png",
+      "scale" : "1x"
+    },
+    {
+      "size" : "40x40",
+      "idiom" : "ipad",
+      "filename" : "icon_80x80.png",
+      "scale" : "2x"
+    },
+    {
+      "size" : "76x76",
+      "idiom" : "ipad",
+      "filename" : "icon_76x76.png",
+      "scale" : "1x"
+    },
+    {
+      "size" : "76x76",
+      "idiom" : "ipad",
+      "filename" : "icon_152x152.png",
+      "scale" : "2x"
+    },
+    {
+      "size" : "83.5x83.5",
+      "idiom" : "ipad",
+      "filename" : "icon_167x167.png",
+      "scale" : "2x"
     },
     {
       "size" : "1024x1024",
       "idiom" : "ios-marketing",
-      "filename" : "Icon-1024.png",
+      "filename" : "icon_1024x1024.png",
       "scale" : "1x"
     }
   ],
@@ -106,14 +165,5 @@ cat > "$ASSETS_DIR/Contents.json" << EOF
   }
 }
 EOF
-
-# Generate icons using ImageMagick
-for base_size in "${!ICON_SIZES[@]}"; do
-    for size in ${ICON_SIZES[$base_size]}; do
-        output_file="$ASSETS_DIR/Icon-$size.png"
-        magick convert "$INPUT_ICON" -resize "${size}x${size}" "$output_file"
-        echo "Generated: Icon-$size.png"
-    done
-done
 
 echo "Icon generation complete!"
