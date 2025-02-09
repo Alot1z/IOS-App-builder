@@ -6,7 +6,7 @@ set -e
 # Icon cache directory
 CACHE_DIR="build/icon-cache"
 ASSETS_DIR="assets"
-SOURCE_ICON="$ASSETS_DIR/app-icon.png"
+SOURCE_ICON="$ASSETS_DIR/Light_Novel_pub_Icon.png" # Using existing LightNovelPub icon
 OUTPUT_DIR="build/Assets.xcassets/AppIcon.appiconset"
 
 # Required sizes for iOS app icons
