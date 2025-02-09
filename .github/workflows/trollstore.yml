@@ -9,6 +9,10 @@ on:
       - 'tools/root/**'
       - 'Exploits/**'
 
+permissions:
+  contents: read
+  actions: write
+
 env:
   APP_NAME: TrollStore
   BUNDLE_ID: com.alot1z.trollstore
@@ -19,16 +23,20 @@ env:
 jobs:
   build:
     name: Build iOS App
-    runs-on: macos-latest
+    runs-on: macos-14
+    timeout-minutes: 30
     
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
       
     - name: Setup Build Environment
       run: |
         sudo xcode-select --switch /Applications/Xcode.app
         brew install ldid imagemagick swift || true
+      shell: bash
         
     - name: Setup Root Components
       run: |
@@ -42,6 +50,7 @@ jobs:
         
         # Merge entitlements
         cat tools/root/root_entitlements.plist > Apps/trollstore/entitlements.plist
+      shell: bash
         
     - name: Build ChOma
       run: |
@@ -49,6 +58,7 @@ jobs:
         make clean
         make
         cp build/choma ../tools/
+      shell: bash
         
     - name: Build Release
       run: |
@@ -87,6 +97,7 @@ jobs:
         ./scripts/sign_app.sh \
           --app "build/${{ env.APP_NAME }}.app" \
           --entitlements entitlements.plist
+      shell: bash
         
     - name: Package IPA
       run: |
@@ -95,12 +106,16 @@ jobs:
         cp -r "${{ env.APP_NAME }}.app" Payload/
         zip -r "${{ env.APP_NAME }}.ipa" Payload
         rm -rf Payload
+      shell: bash
         
     - name: Upload Release IPA
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: TrollStore-Release
         path: |
           Apps/trollstore/build/*.ipa
           Apps/trollstore/build/logs/
           Apps/trollstore/build/debug-symbols/
+        retention-days: 90
+        compression-level: 9
+        overwrite: true
