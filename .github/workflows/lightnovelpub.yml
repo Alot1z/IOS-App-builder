@@ -114,6 +114,11 @@ jobs:
       run: |
         cd Apps/lightnovelpub
         
+        # Create build directory structure
+        mkdir -p build/DerivedData/Build/{Intermediates.noindex,Products}
+        mkdir -p build/logs
+        mkdir -p build/debug-symbols
+        
         # Make scripts executable
         chmod +x scripts/*.sh
         
