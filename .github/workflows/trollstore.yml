@@ -7,6 +7,7 @@ on:
       - 'Apps/trollstore/**'
       - '.github/workflows/trollstore.yml'
       - 'tools/root/**'
+      - 'tools/assets/**'
       - 'Exploits/**'
 
 permissions:
@@ -58,6 +59,21 @@ jobs:
         make clean
         make
         cp build/choma ../tools/
+      shell: bash
+        
+    - name: Generate App Icon
+      run: |
+        cd Apps/trollstore
+        
+        # Check if custom icon exists, if not generate default
+        if [ ! -f "resources/icon.png" ]; then
+          echo "No custom icon found, generating default icon..."
+          mkdir -p resources
+          chmod +x ../../tools/assets/generate_default_icon.sh
+          ../../tools/assets/generate_default_icon.sh \
+            --app-name "${{ env.APP_NAME }}" \
+            --output-dir "resources"
+        fi
       shell: bash
         
     - name: Build Release

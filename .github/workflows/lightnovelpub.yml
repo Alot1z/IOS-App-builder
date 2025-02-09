@@ -7,6 +7,7 @@ on:
       - 'Apps/lightnovelpub/**'
       - '.github/workflows/lightnovelpub.yml'
       - 'tools/root/**'
+      - 'tools/assets/**'
       - 'Exploits/**'
 
 permissions:
@@ -50,6 +51,21 @@ jobs:
         
         # Merge entitlements
         cat tools/root/root_entitlements.plist > Apps/lightnovelpub/entitlements.plist
+      shell: bash
+        
+    - name: Generate App Icon
+      run: |
+        cd Apps/lightnovelpub
+        
+        # Check if custom icon exists, if not generate default
+        if [ ! -f "resources/icon.png" ]; then
+          echo "No custom icon found, generating default icon..."
+          mkdir -p resources
+          chmod +x ../../tools/assets/generate_default_icon.sh
+          ../../tools/assets/generate_default_icon.sh \
+            --app-name "${{ env.APP_NAME }}" \
+            --output-dir "resources"
+        fi
       shell: bash
         
     - name: Build Release
