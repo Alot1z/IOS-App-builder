@@ -103,13 +103,11 @@ fi
 SWIFT_FILES=(src/*.swift)
 echo "Found Swift files: ${SWIFT_FILES[*]}"
 
-# Setup compile flags
+# Set up compiler flags
 COMPILE_FLAGS=(
-    "-target" "arm64-apple-ios${min_ios_version}"
     "-sdk" "$SDKROOT"
-    "-g"
-    "-swift-version" "5"
-    "-module-name" "LightNovelPub"
+    "-target" "arm64-apple-ios$min_ios_version"
+    "-F" "$FRAMEWORK_SEARCH_PATHS"
 )
 
 # Add optimization flags
@@ -128,81 +126,26 @@ case $optimization_level in
         ;;
 esac
 
-# Add ARC flag
+# Add ARC flag if enabled
 if [ "$enable_arc" = true ]; then
-    COMPILE_FLAGS+=("-enable-objc-arc")
+    COMPILE_FLAGS+=("-fobjc-arc")
 fi
 
-# Add build type specific flags
-if [ "$build_type" = "release" ]; then
-    COMPILE_FLAGS+=("-whole-module-optimization")
+# Add bitcode flag if enabled
+if [ "$enable_bitcode" = true ]; then
+    COMPILE_FLAGS+=("-fembed-bitcode")
 fi
 
-# Framework flags
-FRAMEWORK_FLAGS=(
-    "-F" "$SDKROOT/System/Library/Frameworks"
-    "-framework" "UIKit"
-    "-framework" "WebKit"
-    "-framework" "SafariServices"
-    "-framework" "UserNotifications"
-    "-framework" "SwiftUI"
-)
+# Set deployment target
+COMPILE_FLAGS+=("-target-variant" "ios$deployment_target")
 
-# Create build directory
-mkdir -p build/release
-
-# Generate Info.plist
-cat > build/Info.plist << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>en</string>
-    <key>CFBundleExecutable</key>
-    <string>LightNovelPub</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.lightnovelpub.app</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>LightNovelPub</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>${app_version}</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-    <key>LSRequiresIPhoneOS</key>
-    <true/>
-    <key>MinimumOSVersion</key>
-    <string>${min_ios_version}</string>
-    <key>UILaunchStoryboardName</key>
-    <string>LaunchScreen</string>
-    <key>UIRequiredDeviceCapabilities</key>
-    <array>
-        <string>arm64</string>
-    </array>
-    <key>UISupportedInterfaceOrientations</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
-    <key>UIViewControllerBasedStatusBarAppearance</key>
-    <true/>
-</dict>
-</plist>
-EOF
-
-echo "Generated Info.plist at build/Info.plist"
-
-# Compile Swift files
-swiftc "${COMPILE_FLAGS[@]}" "${FRAMEWORK_FLAGS[@]}" "${SWIFT_FILES[@]}" -o "build/release/LightNovelPub"
+# Build the app
+echo "Found Swift files: $SWIFT_FILES"
+swiftc "${COMPILE_FLAGS[@]}" $SWIFT_FILES -o "$BUILD_DIR/LightNovelPub"
 
 # Create IPA structure
 mkdir -p "build/Payload/LightNovelPub.app"
-cp "build/release/LightNovelPub" "build/Payload/LightNovelPub.app/"
+cp "$BUILD_DIR/LightNovelPub" "build/Payload/LightNovelPub.app/"
 cp "build/Info.plist" "build/Payload/LightNovelPub.app/"
 cp -r "build/Assets.xcassets" "build/Payload/LightNovelPub.app/"
 
