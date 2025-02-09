@@ -121,10 +121,10 @@ case $optimization_level in
         COMPILE_FLAGS+=("-O")
         ;;
     2)
-        COMPILE_FLAGS+=("-O2")
+        COMPILE_FLAGS+=("-O")
         ;;
     3|*)
-        COMPILE_FLAGS+=("-O3")
+        COMPILE_FLAGS+=("-O")
         ;;
 esac
 

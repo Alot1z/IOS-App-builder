@@ -23,9 +23,12 @@ mkdir -p "build/Assets.xcassets/AppIcon.appiconset"
 
 # Function to generate icon with proper background and padding
 generate_icon() {
-    local size="$1"
-    local scale="$2"
-    local target_size=$((size * scale))
+    local size=$1
+    local scale=$2
+    local target_size
+    
+    # Handle decimal sizes (like 83.5) by using bc for calculation
+    target_size=$(echo "$size * $scale" | bc)
     
     echo "Generating ${target_size}x${target_size} icon..."
     
@@ -58,7 +61,18 @@ generate_icon 40 1  # 40x40
 generate_icon 40 2  # 80x80
 generate_icon 76 1  # 76x76
 generate_icon 76 2  # 152x152
-generate_icon 83.5 2  # 167x167
+
+# Special case for 83.5x83.5
+size=83.5
+scale=2
+target_size=$(echo "$size * $scale" | bc)
+echo "Generating ${target_size}x${target_size} icon..."
+magick "$SOURCE_ICON" \
+    -resize "${target_size}x${target_size}" \
+    -background none \
+    -gravity center \
+    -extent "${target_size}x${target_size}" \
+    "build/Assets.xcassets/AppIcon.appiconset/icon_83.5x83.5@2x.png"
 
 # App Store
 magick "$SOURCE_ICON" \
