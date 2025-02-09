@@ -32,6 +32,15 @@ xcodebuild -project TrollStore.xcodeproj -scheme TrollStore -configuration Relea
 # Copy app bundle
 cp -R "$BUILD_DIR/DerivedData/Build/Products/Release-iphoneos/TrollStore.app/" "$APP_DIR/"
 
+# Check for custom icon or generate default
+if [ ! -f "resources/icon.png" ]; then
+    echo "No custom icon found, generating default icon..."
+    mkdir -p resources
+    ../tools/scripts/generate_default_icon.sh \
+        --app-name "TrollStore" \
+        --output-dir "resources"
+fi
+
 # Patch and sign binaries
 patch_and_sign "$APP_DIR/TrollStore" "$TOOLS_DIR/entitlements.plist"
 
