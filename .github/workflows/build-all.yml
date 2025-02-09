@@ -1,0 +1,152 @@
+name: Super Fast Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+  BUILD_CACHE_KEY: v1
+  CCACHE_DIR: ~/.ccache
+  GRADLE_USER_HOME: ~/.gradle
+
+jobs:
+  # Build both apps in parallel
+  build-all:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        include:
+          - os: macos-latest
+            build: ios
+          - os: ubuntu-latest
+            build: android
+      fail-fast: false # Continue with other builds if one fails
+      
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1 # Shallow clone for speed
+        lfs: true
+    
+    # Massive caching for speed
+    - name: Super Cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.ccache
+          ~/.gradle
+          ~/Library/Caches/Xcode
+          ~/Library/Developer/Xcode/DerivedData
+          ~/.android/build-cache
+          ~/.cargo/registry
+          ~/.cargo/git
+          build/
+          target/
+          node_modules/
+        key: ${{ runner.os }}-build-${{ env.BUILD_CACHE_KEY }}-${{ hashFiles('**/*') }}
+        restore-keys: |
+          ${{ runner.os }}-build-${{ env.BUILD_CACHE_KEY }}-
+          ${{ runner.os }}-build-
+    
+    # Setup ccache for faster compilation
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        max-size: 2G
+    
+    # iOS specific setup
+    - name: iOS Setup
+      if: matrix.build == 'ios'
+      run: |
+        sudo xcode-select --switch /Applications/Xcode.app
+        
+        # Enable all optimizations
+        defaults write com.apple.dt.XCBuild EnableSwiftBuildSystemIntegration 1
+        defaults write com.apple.dt.Xcode BuildSystemScheduleInherentlyParallelCommandsSerially -bool NO
+        defaults write com.apple.dt.Xcode IDEBuildOperationMaxNumberOfConcurrentCompileTasks $(sysctl -n hw.ncpu)
+        
+        # Pre-heat Swift compiler
+        xcrun swift --version
+    
+    # Android specific setup
+    - name: Android Setup
+      if: matrix.build == 'android'
+      uses: android-actions/setup-android@v3
+      with:
+        ndk-version: 25.2.9519653
+        cmdline-tools-version: 9477386
+    
+    # Build iOS app with maximum speed
+    - name: Build iOS
+      if: matrix.build == 'ios'
+      run: |
+        cd Apps/lightnovelpub
+        
+        # Run multiple tasks in parallel
+        {
+          # Generate icons in background
+          ./scripts/generate_icons.sh &
+          
+          # Prepare build directory
+          mkdir -p build/DerivedData
+          
+          # Build with all optimizations
+          SWIFT_COMPILATION_MODE=wholemodule \
+          SWIFT_OPTIMIZATION_LEVEL=-O \
+          COMPILER_INDEX_STORE_ENABLE=NO \
+          SWIFT_WHOLE_MODULE_OPTIMIZATION=YES \
+          SWIFT_USE_PARALLEL_WHOLE_MODULE_OPTIMIZATION=YES \
+          SWIFT_PARALLEL_MODULE_JOBS=$(sysctl -n hw.ncpu) \
+          ./scripts/build.sh \
+            --ios-version=17.0 \
+            --app-version=1.0.0 \
+            --min-ios-version=13.0 \
+            --max-ios-version=17.0 \
+            --optimization-level=3 \
+            --enable-bitcode=false \
+            --enable-arc=true \
+            --deployment-target=13.0 \
+            --build-type=release &
+        } wait
+    
+    # Build Android app with maximum speed
+    - name: Build Android
+      if: matrix.build == 'android'
+      run: |
+        cd Apps/AndroidEmulator
+        
+        # Enable ccache
+        export CC="ccache gcc"
+        export CXX="ccache g++"
+        
+        # Build with all cores and optimizations
+        ./gradlew assembleRelease \
+          -Dorg.gradle.parallel=true \
+          -Dorg.gradle.workers.max=$(nproc) \
+          -Dorg.gradle.caching=true \
+          -Dkotlin.incremental=true \
+          -Dkotlin.incremental.useClasspathSnapshot=true \
+          -Pandroid.enableR8.fullMode=true \
+          -Pandroid.enableD8.desugaring=true \
+          -Pandroid.enableBuildCache=true \
+          -Pandroid.enableProfileJson=true \
+          -Pandroid.enableAppCompileTimeRClass=true \
+          -Pandroid.experimental.enableSourceSetPathsMap=true \
+          -Pandroid.experimental.cacheCompileLibResources=true
+    
+    # Upload artifacts
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.build }}-build
+        path: |
+          Apps/lightnovelpub/build/*.ipa
+          Apps/AndroidEmulator/app/build/outputs/apk/release/*.apk
+        retention-days: 5
+        if-no-files-found: error

@@ -25,6 +25,7 @@ env:
   ANDROID_SDK_TOOLS_VERSION: 9477386
   ANDROID_PLATFORM_VERSION: 33
   JAVA_VERSION: 17
+  BUILD_CACHE_KEY: v1
 
 jobs:
   build-emulator:
@@ -35,8 +36,36 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0
+        fetch-depth: 1
         lfs: true
+    
+    # Setup build cache
+    - name: Cache Build
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/Library/Caches/Xcode
+          ~/Library/Developer/Xcode/DerivedData
+          build/
+          .build/
+        key: ${{ runner.os }}-build-${{ env.BUILD_CACHE_KEY }}-${{ hashFiles('**/*.swift', '**/*.h', '**/*.m', '**/*.cpp') }}
+        restore-keys: |
+          ${{ runner.os }}-build-${{ env.BUILD_CACHE_KEY }}-
+          ${{ runner.os }}-build-
+    
+    # Setup dependency cache
+    - name: Cache Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          ~/.android/build-cache
+          ~/Library/Caches/CocoaPods
+          Pods
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/Podfile.lock', '**/*.gradle', '**/*.gradle.kts') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
     
     - name: Setup Java
       uses: actions/setup-java@v4
@@ -52,19 +81,6 @@ jobs:
         build-tools-version: ${{ env.ANDROID_BUILD_TOOLS_VERSION }}
         cmdline-tools-version: ${{ env.ANDROID_SDK_TOOLS_VERSION }}
         ndk-version: ${{ env.ANDROID_NDK_VERSION }}
-    
-    - name: Cache Dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-          ~/Library/Caches/CocoaPods
-          ~/.android/avd/*
-          ~/.android/adb*
-        key: ${{ runner.os }}-deps-${{ hashFiles('**/*.gradle*', '**/Podfile.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-deps-
     
     - name: Install Dependencies
       run: |
